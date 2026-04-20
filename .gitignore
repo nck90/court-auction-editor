@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+env/
+.Python
+pip-log.txt
+
+# Project outputs and samples
+output/
+run/
+*.hwp
+*.hwpx
+*.indd
+*.idml
+/*.pdf
+
+# Keep the editing-standard PDF for reference
+!법원경매공고 원고 편집 기준 (2023.12.04).pdf
+
+# Runtime learning logs (regenerate themselves)
+knowledge/cache/
+knowledge/runs.jsonl
+knowledge/corrections.jsonl
+knowledge/promotions.jsonl
+knowledge/*.bak
+
+# Large sample directories
+0320*/
+청주지방법원*/
+0320_*
+청주지방법원*
+대구지방법원*
+
+# Test artifacts
+tests/fixtures/*.hwp
+tests/fixtures/*.pdf
+tests/output/
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code / OMC session state
+.omc/
+.omx/
+.claude/
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
