@@ -44,4 +44,4 @@ RUN mkdir -p output/web
 EXPOSE 8000
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["gunicorn", "--chdir", "app", "--bind", "0.0.0.0:8000", "--workers", "2", "--threads", "4", "--timeout", "300", "web_app:app"]
+CMD ["gunicorn", "--chdir", "app", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "8", "--timeout", "300", "web_app:app"]
