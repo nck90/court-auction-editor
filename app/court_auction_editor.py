@@ -900,6 +900,7 @@ def html_to_pdf(html_path: Path, pdf_path: Path) -> None:
         chrome,
         "--headless=new",
         "--disable-gpu",
+        "--no-sandbox",
         "--no-pdf-header-footer",
         f"--print-to-pdf={pdf_path.resolve()}",
         str(html_path.resolve().as_uri()),
