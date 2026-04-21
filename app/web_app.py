@@ -43,7 +43,6 @@ from court_auction_editor import build_document, html_to_pdf
 from render_final_notice import load_entries, render_html as render_final_html, render_pdf as render_final_pdf, format_entry
 from render_hwp_friendly_rtf import render_docx
 from render_xlsx import render_xlsx
-from render_xlsx_designed import render_xlsx_designed
 
 from batch_process import run_indesign_export
 
@@ -175,12 +174,6 @@ def run_pipeline(
             render_xlsx(doc, final_xlsx)
         except Exception:
             final_xlsx = None
-
-        designed_xlsx = folder / f"{safe_stem}.최종.디자인.xlsx"
-        try:
-            render_xlsx_designed(doc, designed_xlsx)
-        except Exception:
-            designed_xlsx = None
         step("변환 완료")
 
         job.outputs = [
@@ -188,7 +181,6 @@ def run_pipeline(
             edited_pdf,
             final_pdf,
             *([final_xlsx] if final_xlsx else []),
-            *([designed_xlsx] if designed_xlsx else []),
             edited_html_path,
             final_html,
             json_path,
@@ -397,13 +389,13 @@ JOB_VIEW = """
     <p class="status error">문제가 발생했습니다. 파일을 다시 확인하시거나 관리자에게 문의해 주세요.</p>
   {% endif %}
   {% if pdf_items %}
-    <h2>생성된 PDF</h2>
+    <h2>생성된 문서</h2>
     <ul class="pdf-list">
     {% for item in pdf_items %}
       <li>
         <span class="doc-name">{{ item.label }}</span>
         <span class="doc-actions">
-          <a href="{{ item.href }}" target="_blank">열기</a>
+          {% if item.is_pdf %}<a href="{{ item.href }}" target="_blank">열기</a>{% endif %}
           <a href="{{ item.href }}?dl=1">다운로드</a>
         </span>
       </li>
@@ -483,18 +475,20 @@ def convert():
     return redirect(url_for("job_view", job_id=job_id), code=303)
 
 
-PDF_LABEL_MAP = [
-    ("최종", "최종 편집본 PDF"),
-    ("편집본", "1차 편집본 PDF"),
+DOC_LABEL_MAP = [
+    ("최종.xlsx", "최종 Excel (인디자인 붙여넣기용)"),
+    ("최종.pdf", "최종 편집본 PDF"),
+    ("편집본.pdf", "1차 편집본 PDF"),
     ("InDesign", "InDesign 조판 PDF"),
 ]
+VISIBLE_EXTS = {".pdf", ".xlsx"}
 
 
-def _pdf_label(name: str) -> str:
-    for key, label in PDF_LABEL_MAP:
+def _doc_label(name: str) -> str:
+    for key, label in DOC_LABEL_MAP:
         if key in name:
             return label
-    return "PDF"
+    return name
 
 
 @app.get("/jobs/<job_id>")
@@ -506,12 +500,13 @@ def job_view(job_id: str):
     status_class = {"ok": "ok", "error": "error"}.get(job.status, "info")
     pdf_items = []
     for path in job.outputs:
-        if not path.exists() or path.suffix.lower() != ".pdf":
+        if not path.exists() or path.suffix.lower() not in VISIBLE_EXTS:
             continue
         pdf_items.append({
             "name": path.name,
-            "label": _pdf_label(path.name),
+            "label": _doc_label(path.name),
             "href": url_for("job_file", job_id=job.job_id, name=path.name),
+            "is_pdf": path.suffix.lower() == ".pdf",
         })
 
     preview = None
