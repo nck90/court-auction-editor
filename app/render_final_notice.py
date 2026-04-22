@@ -671,14 +671,42 @@ def _gapgu_bracket_extras(note_lines: list[str]) -> list[str]:
     return extras  # type: ignore[return-value]
 
 
+_GAPGU_NAMED_RE = re.compile(
+    r"\(?갑구\s*(\d+)번\s+(?:공유자\s+)?(.+?)\s*지분\s*(\d+)분의\s*(\d+)\s*전부\)?"
+)
+_SHARE_OWNER_FULL_RE = re.compile(
+    r"\(\s*공유자\s+(.+?)\s*지분\s*(\d+)분의\s*(\d+)\s*전부\s*\)"
+)
+_OWNER_PARTIAL_RE = re.compile(
+    r"\(\s*(소유자|공유자)\s+(.+?)\s*지분\s*(?:중\s*)?일부\s*\(?\s*(\d+)분의\s*(\d+)\s*\)?\s*\)"
+)
+
+
+def _share_bracket_body(note: str) -> str | None:
+    m = _GAPGU_NAMED_RE.search(note)
+    if m:
+        name = m.group(2).strip().replace(" ", "")
+        return f"갑구{m.group(1)}번{name}{m.group(4)}/{m.group(3)}지분전부"
+    m = _SHARE_OWNER_FULL_RE.search(note)
+    if m:
+        name = m.group(1).strip().replace(" ", "")
+        return f"공유자{name}{m.group(3)}/{m.group(2)}지분전부"
+    m = _OWNER_PARTIAL_RE.search(note)
+    if m:
+        role = m.group(1)
+        name = m.group(2).strip().replace(" ", "")
+        return f"{role}{name}{m.group(4)}/{m.group(3)}지분일부"
+    return None
+
+
 def _has_gapgu_note(note_lines: list[str]) -> bool:
     for note in note_lines:
-        if re.search(r"\(?갑구\s*(\d+)번\s+([가-힣]+)\s*지분\s*(\d+)분의\s*(\d+)\s*전부\)?", note):
+        if _GAPGU_NAMED_RE.search(note):
             return True
     return False
 
 
-def format_property(block: dict, prev_address: str, note_lines: list[str], entry_usage: str, is_last: bool, jesi_extra: str = "", is_single_property: bool = False) -> tuple[str, str]:
+def format_property(block: dict, prev_address: str, note_lines: list[str], entry_usage: str, is_last: bool, jesi_extra: str = "", is_single_property: bool = False, share_body: str | None = None) -> tuple[str, str]:
     address = shorten_address(block["address"], prev_address)
     raw_details = block.get("details", [])
     cleaned_raw_details = [clean_location_phrase(detail, entry_usage) for detail in raw_details if clean_location_phrase(detail, entry_usage)]
@@ -723,18 +751,14 @@ def format_property(block: dict, prev_address: str, note_lines: list[str], entry
     # 농지취득자격증명요/제시외물건매각제외 를 비고에서 분리해서 bracket 안에
     # `[갑구...지분전부.농지취득자격증명요,제시외 물건매각제외]` 형태로 함께 붙인다.
     # 여러 property 가 각자 개별 갑구 를 가지는 경우는 엔트리-레벨 비고 유지.
-    for note in note_lines:
-        m = re.search(r"\(?갑구\s*(\d+)번\s+([가-힣]+)\s*지분\s*(\d+)분의\s*(\d+)\s*전부\)?", note)
-        if m:
-            gap_body = f"갑구{m.group(1)}번{m.group(2)}{m.group(4)}/{m.group(3)}지분전부"
-            bracket_content = gap_body
-            if is_single_property:
-                for extra_label, sep in _gapgu_bracket_extras(note_lines):
-                    bracket_content += f"{sep}{extra_label}"
-            gap_text = f"[{bracket_content}]"
-            if gap_text not in line:
-                line = line.rstrip() + gap_text
-            break
+    if share_body:
+        bracket_content = share_body
+        if is_single_property and share_body.startswith("갑구"):
+            for extra_label, sep in _gapgu_bracket_extras(note_lines):
+                bracket_content += f"{sep}{extra_label}"
+        gap_text = f"[{bracket_content}]"
+        if gap_text not in line:
+            line = line.rstrip() + gap_text
     usage = infer_usage(block, entry_usage)
     return compact_address_text(line), usage
 
@@ -843,15 +867,19 @@ def format_entry(entry: dict) -> dict:
     # 붙이고, 없는 property 는 is_last 로 결정한다.
     jesi_has_explicit = bool(jesi_map)
     is_single_property = len(blocks) == 1
+    share_bodies = [b for n in note_lines if (b := _share_bracket_body(n))]
     for idx, block in enumerate(blocks):
         is_last = idx == len(blocks) - 1
         jesi_extra = jesi_map.get(idx, "")
+        share_body = share_bodies[idx] if idx < len(share_bodies) else None
+        if not is_single_property and len(share_bodies) <= 1:
+            share_body = share_bodies[0] if idx == 0 and share_bodies else None
         # When jesi_map explicitly covers the whole attribution, disable is_last
         # extra_area_text fallback.
         if jesi_has_explicit:
-            line, usage = format_property(block, prev, note_lines, entry["usage"], False, jesi_extra, is_single_property=is_single_property)
+            line, usage = format_property(block, prev, note_lines, entry["usage"], False, jesi_extra, is_single_property=is_single_property, share_body=share_body)
         else:
-            line, usage = format_property(block, prev, note_lines, entry["usage"], is_last, "", is_single_property=is_single_property)
+            line, usage = format_property(block, prev, note_lines, entry["usage"], is_last, "", is_single_property=is_single_property, share_body=share_body)
         if compact_common(entry["usage"]) == "기타" and any("분묘" in compact_common(n) for n in note_lines) and usage == "전":
             usage = "기타"
         lines.append(line)
