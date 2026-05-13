@@ -149,6 +149,12 @@
     max-width: 1700px; margin: 0 auto;
   }
   @media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
+  body.edit-focus .layout { grid-template-columns: minmax(720px, 1fr) minmax(300px, 0.42fr); }
+  body.edit-focus .pdf-pane iframe { height: 42vh; }
+  @media (max-width: 1300px) {
+    body.edit-focus .layout { grid-template-columns: 1fr; }
+    body.edit-focus .pdf-pane { display: none; }
+  }
 
   /* === 그룹 박스 === */
   .group-box {
@@ -213,6 +219,7 @@
   .case-card.editing {
     background: linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 72%, white), #fff);
     box-shadow: inset 3px 0 0 var(--accent);
+    cursor: default;
   }
   .suspect-marker {
     background: var(--warn-soft); color: #92400e; border: 1px solid #f0c97c;
@@ -304,10 +311,10 @@
 
   .inline-editor {
     grid-column: 1 / -1;
-    margin-top: 2px;
-    padding: 14px;
+    margin-top: 4px;
+    padding: 16px;
     border: 1px solid var(--accent);
-    border-radius: 10px;
+    border-radius: 8px;
     background: rgba(255,255,255,0.92);
     box-shadow: var(--shadow-xs);
   }
@@ -348,15 +355,25 @@
     outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
   }
   .field textarea { resize: vertical; min-height: 70px; }
+  .field textarea[data-field="price_pair"],
+  .field textarea[data-field="note"] { min-height: 96px; }
   .field-mono { font-family: ui-monospace, monospace; }
 
   .locations { display: flex; flex-direction: column; gap: 8px; }
   .loc-row {
-    display: grid; grid-template-columns: 1fr 130px auto; gap: 8px; align-items: flex-start;
-    padding: 8px; border: 1px solid var(--border-soft); border-radius: 6px; background: #fafbfd;
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(160px, 220px) auto;
+    gap: 8px; align-items: stretch;
+    padding: 10px; border: 1px solid var(--border-soft); border-radius: 6px; background: #fafbfd;
   }
   .loc-row textarea, .loc-row input { padding: 6px 8px; font-size: 12.5px; }
-  .loc-row textarea { min-height: 48px; }
+  .loc-row textarea { min-height: 72px; }
+  .loc-row input { min-height: 42px; }
+  .loc-row .loc-rm { align-self: start; white-space: nowrap; }
+  @media (max-width: 760px) {
+    .field-row { grid-template-columns: 1fr; gap: 0; }
+    .loc-row { grid-template-columns: 1fr; }
+    .loc-row .loc-rm { justify-self: end; }
+  }
   .add-loc {
     padding: 7px 12px; font-size: 12px; border: 1px dashed var(--border); border-radius: 6px;
     background: #fff; cursor: pointer; color: var(--muted); width: 100%; transition: all .12s;
@@ -460,7 +477,8 @@
 <div class="welcome" id="welcome">
   <div>
     <strong>안내</strong> · 카드를 다른 그룹으로 <strong>드래그</strong>하거나 우측 <strong>드롭다운</strong>으로 그룹을 바꿉니다.
-    카드를 <strong>클릭</strong>하면 그 자리에서 바로 펼쳐져 소재지·비고 등을 직접 편집할 수 있고, <strong>체크박스</strong>로 여러 카드를 한꺼번에 옮길 수 있습니다.
+    카드를 <strong>클릭</strong>하면 화면 이동 없이 그 자리에서 바로 소재지·비고 등을 직접 편집할 수 있고, 편집 중에는 입력칸이 넓어집니다.
+    <strong>체크박스</strong>로 여러 카드를 한꺼번에 옮길 수 있습니다.
     오른쪽 아래 도움말 버튼에 단축키가 있습니다.
   </div>
   <button class="close" id="welcome-close" aria-label="닫기">×</button>
@@ -538,8 +556,8 @@
 
     <h4>내용 편집</h4>
     <ul>
-      <li>카드 클릭 또는 카드의 [편집] 버튼 → 같은 자리에서 인라인 편집기 펼침</li>
-      <li>사건번호·중복태그·물건번호·금액·소재지·비고를 화면 전환 없이 바로 수정</li>
+      <li>카드 클릭 또는 카드의 [편집] 버튼 → 화면 이동 없이 같은 자리에서 바로 수정</li>
+      <li>편집 중에는 카드 영역을 넓혀 사건번호·금액·소재지·비고 입력칸을 크게 표시</li>
       <li>소재지는 [＋ 소재지 행 추가] 버튼으로 추가, 각 행 우측 [×]로 삭제</li>
     </ul>
 
@@ -637,6 +655,8 @@ function undo() {
   ORDER = [...h.order];
   DELETED.clear();
   h.deleted.forEach(x => DELETED.add(x));
+  if (activeIdx >= 0 && DELETED.has(activeIdx)) activeIdx = -1;
+  document.body.classList.toggle('edit-focus', activeIdx >= 0);
   document.getElementById('undo').disabled = HISTORY.length === 0;
   renderAll();
   toast(`되돌림: ${h.label}`, 'info');
@@ -739,10 +759,13 @@ function updatePricePair(idx, rawValue) {
 
 function openEditor(idx) {
   activeIdx = activeIdx === idx ? -1 : idx;
+  document.body.classList.toggle('edit-focus', activeIdx >= 0);
   renderAll();
   if (activeIdx === idx) {
     requestAnimationFrame(() => {
-      const input = document.querySelector(`.case-card[data-idx="${idx}"] .inline-editor input[data-field="case_no"]`);
+      const card = document.querySelector(`.case-card[data-idx="${idx}"]`);
+      if (card) card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      const input = card?.querySelector('.inline-editor textarea[data-k="address"], .inline-editor input[data-field="case_no"]');
       if (input) input.focus();
     });
   }
@@ -751,6 +774,7 @@ function openEditor(idx) {
 function closeEditor() {
   if (activeIdx < 0) return;
   activeIdx = -1;
+  document.body.classList.remove('edit-focus');
   renderAll();
 }
 
@@ -764,7 +788,7 @@ function createInlineEditor(idx) {
     <div class="inline-editor-head">
       <div>
         <strong>사건 직접 수정</strong>
-        <div class="hint">화면 전환 없이 여기서 바로 수정됩니다. PDF에는 상단 저장 버튼을 눌러 반영합니다.</div>
+        <div class="hint">화면 이동 없이 바로 수정됩니다. PDF에는 상단 저장 버튼을 눌러 반영합니다.</div>
       </div>
       <button type="button" class="icon-btn" data-act="close-editor">닫기</button>
     </div>
@@ -800,7 +824,7 @@ function createInlineEditor(idx) {
       row.innerHTML = `
         <textarea data-li="${li}" data-k="address" placeholder="소재지·면적">${escapeHtml(loc.address || '')}</textarea>
         <input type="text" data-li="${li}" data-k="use" placeholder="용도" value="${escapeHtml(loc.use || '')}">
-        <button type="button" class="icon-btn danger" data-rm="${li}" title="이 소재지 행 삭제">행 삭제</button>
+        <button type="button" class="icon-btn danger loc-rm" data-rm="${li}" title="이 소재지 행 삭제">행 삭제</button>
       `;
       locList.appendChild(row);
     });
@@ -825,6 +849,7 @@ function createInlineEditor(idx) {
       snapshot(`삭제: ${r.case_no || '미상'}`);
       DELETED.add(idx);
       activeIdx = -1;
+      document.body.classList.remove('edit-focus');
       renderAll();
       toast(`${r.case_no || '사건'} 삭제됨`, 'warn');
       return;
@@ -840,13 +865,21 @@ function createInlineEditor(idx) {
 
   wrap.addEventListener('input', e => {
     const field = e.target.dataset.field;
-    if (!field) return;
+    const li = parseInt(e.target.dataset.li);
+    const key = e.target.dataset.k;
+    if (!field && (Number.isNaN(li) || !key)) return;
     if (!snapTaken) {
       snapshot(`편집: ${r.case_no || '미상'}`);
       snapTaken = true;
     }
-    if (field === 'price_pair') updatePricePair(idx, e.target.value);
-    else STATE[idx][field] = e.target.value;
+    if (!Number.isNaN(li) && key) {
+      if (!STATE[idx].locations[li]) STATE[idx].locations[li] = { address: '', use: '' };
+      STATE[idx].locations[li][key] = e.target.value;
+    } else if (field === 'price_pair') {
+      updatePricePair(idx, e.target.value);
+    } else {
+      STATE[idx][field] = e.target.value;
+    }
   });
   wrap.addEventListener('change', e => {
     const field = e.target.dataset.field;
@@ -867,7 +900,6 @@ function createInlineEditor(idx) {
       }
       if (!STATE[idx].locations[li]) STATE[idx].locations[li] = { address: '', use: '' };
       STATE[idx].locations[li][key] = e.target.value;
-      renderAll();
     }
   });
   wrap.addEventListener('focusout', e => {
@@ -1079,6 +1111,10 @@ document.getElementById('ctx-menu').addEventListener('click', e => {
     if (confirm(`사건 ${r.case_no} (물건 ${r.item_no})을(를) 삭제하시겠습니까?`)) {
       snapshot(`삭제: ${r.case_no}`);
       DELETED.add(ctxIdx);
+      if (activeIdx === ctxIdx) {
+        activeIdx = -1;
+        document.body.classList.remove('edit-focus');
+      }
       renderAll();
       toast(`${r.case_no} 삭제됨`, 'warn');
     }
@@ -1236,6 +1272,8 @@ document.getElementById('reset').addEventListener('click', () => {
   for (let i = 0; i < ORIGINAL.length; i++) STATE[i] = JSON.parse(JSON.stringify(ORIGINAL[i]));
   ORDER = [...ORIGINAL_ORDER];
   DELETED.clear(); SELECTED.clear(); HISTORY.length = 0;
+  activeIdx = -1;
+  document.body.classList.remove('edit-focus');
   document.getElementById('undo').disabled = true;
   renderAll();
   toast('모든 변경 취소됨', 'info');
