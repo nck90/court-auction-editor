@@ -1,0 +1,26 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.env
+.venv/
+venv/
+
+# Local agent/editor state
+.claude/
+.omc/
+.omx/
+
+# Runtime uploads and generated output
+uploads/
+outputs/
+states/
+measurement_all/
+measurement_all2/
+measurement_all3/
+measurement_results/
+
+# Local source documents and screenshots
+0320 */
+KakaoTalk_Photo_*.png
+*.pdf
+*.zip

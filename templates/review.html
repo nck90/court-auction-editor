@@ -1,0 +1,1352 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>분류 검수 — 법원 경매공고 편집기</title>
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    --bg: #f5f7fb;
+    --bg-card: #ffffff;
+    --border: #d6dde6;
+    --border-soft: #e9eef3;
+    --fg: #1f2328;
+    --muted: #6b7382;
+    --accent: #2563eb;
+    --accent-soft: #eaf1ff;
+    --warn: #f59e0b;
+    --warn-soft: #fff8e6;
+    --danger: #dc2626;
+    --danger-soft: #ffebeb;
+    --success: #15803d;
+    --success-soft: #e6f6ec;
+    --shadow-xs: 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 10px 24px rgba(0,0,0,0.06);
+    --shadow-lg: 0 10px 30px rgba(0,0,0,0.14), 0 20px 50px rgba(0,0,0,0.10);
+
+    /* 그룹별 컬러 — 좌측 띠/뱃지/배경에 사용 */
+    --g-apt: #2563eb;
+    --g-yulrip: #14b8a6;
+    --g-dandok: #8b5cf6;
+    --g-sangga: #f59e0b;
+    --g-toji: #16a34a;
+    --g-etc: #6b7382;
+    --g-exclude: #d97706;
+  }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    font-size: 13px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* === 상단 바 === */
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .topbar-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .topbar-row.main { justify-content: space-between; }
+  .topbar-row.sub { gap: 10px; }
+  .title-block { display: flex; align-items: baseline; gap: 12px; }
+  .topbar h1 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.2px; }
+  .meta-info { color: var(--muted); font-size: 12.5px; }
+  .topbar-actions { display: flex; gap: 6px; align-items: center; }
+  .topbar-actions .link { color: var(--muted); font-size: 12.5px; text-decoration: none; padding: 0 6px; }
+  .topbar-actions .link:hover { color: var(--accent); text-decoration: underline; }
+  .topbar-actions .btn { padding: 6px 12px; font-size: 12.5px; }
+  .spacer { flex: 1; }
+
+  .progress-wrap {
+    display: flex; align-items: center; gap: 8px; min-width: 200px;
+    padding: 4px 12px; border-radius: 999px; background: var(--bg);
+    border: 1px solid var(--border); font-size: 11.5px; color: var(--muted);
+  }
+  .progress-wrap .bar {
+    flex: 1; height: 6px; border-radius: 3px; background: var(--border-soft); overflow: hidden;
+  }
+  .progress-wrap .bar-fill {
+    height: 100%; background: linear-gradient(90deg, var(--accent), var(--g-yulrip));
+    transition: width .3s; width: 0%;
+  }
+
+  .pill {
+    padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 500;
+    background: var(--bg-card); border: 1px solid var(--border); color: var(--muted);
+    transition: all .15s;
+  }
+  .pill.active.changed { background: var(--warn-soft); border-color: var(--warn); color: #92400e; }
+  .pill.active.deleted { background: var(--danger-soft); border-color: var(--danger); color: #991b1b; }
+  .pill.active.edited { background: var(--accent-soft); border-color: var(--accent); color: #1d4ed8; }
+
+  .btn {
+    padding: 7px 14px; border: 1px solid var(--accent); background: var(--accent);
+    color: #fff; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500;
+    transition: all .15s;
+  }
+  .btn:hover:not(:disabled) { filter: brightness(.95); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+  .btn:active:not(:disabled) { transform: translateY(0); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn.secondary { background: #fff; color: var(--fg); border-color: var(--border); }
+  .btn.secondary:hover:not(:disabled) { background: var(--bg); }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); padding: 6px 8px; }
+  .btn.ghost:hover { background: var(--border-soft); }
+  .btn.danger { background: var(--danger); border-color: var(--danger); }
+
+  .nav { font-size: 12.5px; color: var(--muted); }
+  .nav a { color: var(--accent); text-decoration: none; }
+  .nav a:hover { text-decoration: underline; }
+
+  /* === 검색 바 === */
+  .toolbar {
+    background: #fff; border-bottom: 1px solid var(--border-soft);
+    padding: 8px 18px;
+    display: grid; gap: 6px;
+  }
+  .toolbar .tb-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .toolbar .tb-row.filters { gap: 4px; }
+  .search { flex: 1; min-width: 240px; max-width: 100%; position: relative; }
+  .search input {
+    width: 100%; padding: 7px 12px; border: 1px solid var(--border); border-radius: 7px;
+    font-size: 13px; background: #fff; transition: all .12s;
+  }
+  .search input:focus { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .gf {
+    padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border);
+    background: #fff; font-size: 11.5px; cursor: pointer; transition: all .12s;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .gf:hover { border-color: var(--accent); color: var(--accent); }
+  .gf.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .gf .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .gf.active .dot { background: rgba(255,255,255,.7); }
+
+  /* === Bulk action 바 === */
+  .bulkbar {
+    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+    background: var(--fg); color: #fff; padding: 8px 14px; border-radius: 999px;
+    box-shadow: var(--shadow-lg); z-index: 80;
+    display: none; gap: 10px; align-items: center; font-size: 12.5px;
+  }
+  .bulkbar.open { display: flex; animation: bulkIn .2s ease; }
+  @keyframes bulkIn { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  .bulkbar select {
+    padding: 4px 8px; border: 1px solid #444; border-radius: 5px; background: #2a2d33; color: #fff; font-size: 12px;
+  }
+  .bulkbar button { background: var(--accent); border: 0; color: #fff; padding: 4px 10px; border-radius: 5px; cursor: pointer; font-size: 12px; }
+  .bulkbar button.danger { background: var(--danger); }
+  .bulkbar button.ghost { background: transparent; }
+
+  /* === 레이아웃 === */
+  .layout {
+    display: grid; grid-template-columns: minmax(440px, 1fr) minmax(380px, 0.85fr);
+    gap: 14px; padding: 14px; align-items: flex-start;
+    max-width: 1700px; margin: 0 auto;
+  }
+  @media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
+
+  /* === 그룹 박스 === */
+  .group-box {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    margin-bottom: 12px; overflow: hidden; box-shadow: var(--shadow-xs);
+    transition: box-shadow .15s, border-color .15s;
+  }
+  .group-box.drag-over {
+    border-color: var(--g-color, var(--accent));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--g-color, var(--accent)) 20%, transparent);
+  }
+  .group-head {
+    padding: 10px 14px; display: flex; align-items: center; gap: 10px;
+    user-select: none; cursor: pointer;
+    border-bottom: 1px solid transparent;
+    background: linear-gradient(90deg, color-mix(in srgb, var(--g-color, var(--muted)) 6%, white), white);
+  }
+  .group-box.collapsed .group-head { border-bottom-color: var(--border-soft); }
+  .group-head .gh-color { width: 4px; height: 22px; border-radius: 2px; background: var(--g-color, var(--accent)); }
+  .group-head .gh-title { font-size: 13.5px; font-weight: 700; }
+  .group-head .gh-subtitle { color: var(--muted); font-size: 11px; font-weight: 500; }
+  .group-head .gh-count {
+    margin-left: auto; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600;
+    background: color-mix(in srgb, var(--g-color, var(--muted)) 12%, white);
+    color: var(--g-color, var(--muted));
+  }
+  .group-head .gh-toggle { color: var(--muted); font-size: 12px; transition: transform .2s; }
+  .group-box.collapsed .gh-toggle { transform: rotate(-90deg); }
+
+  .cards { display: flex; flex-direction: column; }
+  .group-box.collapsed .cards { display: none; }
+  .group-empty {
+    padding: 24px 16px; color: var(--muted); font-size: 12px; text-align: center;
+    background: color-mix(in srgb, var(--g-color, var(--muted)) 3%, white);
+    border-top: 1px dashed var(--border-soft);
+  }
+
+  /* === 카드 === */
+  .case-card {
+    padding: 11px 14px; border-bottom: 1px solid var(--border-soft);
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px;
+    cursor: grab; user-select: none;
+    transition: background .12s, opacity .15s;
+    position: relative;
+  }
+  .case-card:last-child { border-bottom: 0; }
+  .case-card:hover { background: var(--bg); }
+  .case-card.dragging { opacity: 0.4; cursor: grabbing; }
+  .case-card.drop-before { box-shadow: inset 0 3px 0 var(--accent); }
+  .case-card.drop-after { box-shadow: inset 0 -3px 0 var(--accent); }
+  .case-card.changed { background: var(--warn-soft); border-left: 3px solid var(--warn); padding-left: 11px; }
+  .case-card.edited { background: var(--accent-soft); border-left: 3px solid var(--accent); padding-left: 11px; }
+  .case-card.changed.edited { background: linear-gradient(90deg, var(--warn-soft) 50%, var(--accent-soft)); }
+  .case-card.selected { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+  .case-card.hidden { display: none; }
+  .case-card.flash { animation: flash 1s ease; }
+  .case-card.suspect { box-shadow: inset 3px 0 0 var(--warn); }
+  .case-card.suspect:hover { box-shadow: inset 3px 0 0 var(--warn), 0 0 0 1px var(--warn-soft); }
+  .case-card.appear { animation: appear .35s ease backwards; animation-delay: var(--i, 0ms); }
+  @keyframes flash { 0% { background: var(--success-soft); } 100% { background: var(--bg-card); } }
+  @keyframes appear { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .case-card.editing {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 72%, white), #fff);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .suspect-marker {
+    background: var(--warn-soft); color: #92400e; border: 1px solid #f0c97c;
+    font-size: 10.5px; padding: 1px 7px; border-radius: 999px;
+    margin-left: 2px; cursor: help; font-weight: 500;
+  }
+
+  /* === 풀스크린 PDF 모드 === */
+  body.pdf-fs .layout { grid-template-columns: 0 1fr; }
+  body.pdf-fs #kanban { display: none; }
+  body.pdf-fs .pdf-pane iframe { height: calc(100vh - 158px); }
+
+  /* === 컨텍스트 메뉴 === */
+  .ctx-menu {
+    position: fixed; z-index: 400; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; box-shadow: var(--shadow-md); padding: 4px;
+    min-width: 200px; display: none;
+  }
+  .ctx-menu.open { display: block; animation: ctxIn .12s ease; }
+  @keyframes ctxIn { from { opacity: 0; transform: translateY(-4px); } }
+  .ctx-item {
+    padding: 7px 12px; border-radius: 5px; font-size: 12.5px; cursor: pointer;
+    display: flex; align-items: center; gap: 8px; color: var(--fg);
+  }
+  .ctx-item:hover { background: var(--accent-soft); }
+  .ctx-item.danger:hover { background: var(--danger-soft); color: var(--danger); }
+  .ctx-sep { height: 1px; background: var(--border-soft); margin: 4px 0; }
+  .ctx-sub-title { padding: 4px 12px; font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; }
+
+  .cc-checkbox {
+    width: 16px; height: 16px; border: 1.5px solid var(--border); border-radius: 4px;
+    cursor: pointer; background: #fff; flex-shrink: 0; position: relative;
+    transition: all .12s; margin-top: 2px;
+  }
+  .cc-checkbox:hover { border-color: var(--accent); }
+  .case-card.selected .cc-checkbox { background: var(--accent); border-color: var(--accent); }
+  .case-card.selected .cc-checkbox::after {
+    content: ''; position: absolute; left: 4px; top: 1px;
+    width: 5px; height: 9px; border-right: 2px solid #fff; border-bottom: 2px solid #fff;
+    transform: rotate(45deg);
+  }
+
+  .cc-meta { min-width: 0; }
+  .cc-line1 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12.5px; }
+  .case-no {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-weight: 700; color: var(--accent); font-size: 12.5px;
+  }
+  .dup { color: var(--danger); font-size: 11px; padding: 1px 6px; background: var(--danger-soft); border-radius: 4px; }
+  .item-no { color: var(--muted); font-size: 11.5px; }
+  .badge {
+    font-size: 10.5px; padding: 1px 7px; border-radius: 999px;
+    background: var(--border-soft); color: var(--muted);
+  }
+  .badge.changed { background: var(--warn-soft); color: #92400e; }
+  .badge.edited { background: var(--accent-soft); color: #1d4ed8; }
+
+  .cc-preview {
+    margin-top: 5px; color: var(--fg); font-size: 12px;
+    line-height: 1.5; word-break: keep-all; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .cc-preview mark { background: #fff7c2; color: inherit; padding: 0 2px; border-radius: 3px; }
+  .cc-uses { margin-top: 4px; }
+  .cc-uses span {
+    display: inline-block; padding: 0 7px; border-radius: 4px;
+    background: var(--accent-soft); color: var(--accent); font-size: 10.5px; margin-right: 4px;
+  }
+  .cc-note {
+    margin-top: 4px; color: var(--muted); font-size: 11.5px; font-style: italic;
+    display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
+  }
+
+  .cc-controls { display: flex; flex-direction: column; gap: 5px; align-items: flex-end; min-width: 110px; }
+  .cc-controls select {
+    padding: 4px 7px; border: 1px solid var(--border); border-radius: 5px;
+    font-size: 11.5px; background: #fff; min-width: 110px;
+    transition: border-color .12s;
+  }
+  .cc-controls select:focus { outline: 0; border-color: var(--accent); }
+  .icon-btn {
+    background: #fff; border: 1px solid var(--border); padding: 3px 7px;
+    border-radius: 5px; font-size: 12px; cursor: pointer; color: var(--muted);
+    transition: all .12s;
+  }
+  .icon-btn:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .icon-btn.danger:hover { background: var(--danger-soft); color: var(--danger); border-color: var(--danger); }
+  .row-btns { display: flex; gap: 4px; }
+
+  .inline-editor {
+    grid-column: 1 / -1;
+    margin-top: 2px;
+    padding: 14px;
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    background: rgba(255,255,255,0.92);
+    box-shadow: var(--shadow-xs);
+  }
+  .inline-editor-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    margin-bottom: 12px;
+  }
+  .inline-editor-head strong { font-size: 13px; color: var(--accent); }
+  .inline-editor-head .hint { color: var(--muted); font-size: 11.5px; }
+
+  /* === PDF === */
+  .pdf-pane { position: sticky; top: 96px; }
+  .pdf-pane .ph {
+    background: #fff; border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center;
+    margin-bottom: 8px; box-shadow: var(--shadow-xs);
+  }
+  .pdf-pane .ph a { color: var(--accent); text-decoration: none; }
+  .pdf-pane .ph a:hover { text-decoration: underline; }
+  .pdf-pane iframe {
+    width: 100%; height: calc(100vh - 158px);
+    border: 1px solid var(--border); border-radius: 8px;
+    background: #fff; box-shadow: var(--shadow-xs);
+  }
+
+  .field { margin-bottom: 14px; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field label {
+    display: block; font-size: 11.5px; color: var(--muted);
+    margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  .field input, .field textarea, .field select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 13px; background: #fff; font-family: inherit; line-height: 1.5;
+    transition: border-color .12s, box-shadow .12s;
+  }
+  .field input:focus, .field textarea:focus, .field select:focus {
+    outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .field textarea { resize: vertical; min-height: 70px; }
+  .field-mono { font-family: ui-monospace, monospace; }
+
+  .locations { display: flex; flex-direction: column; gap: 8px; }
+  .loc-row {
+    display: grid; grid-template-columns: 1fr 130px auto; gap: 8px; align-items: flex-start;
+    padding: 8px; border: 1px solid var(--border-soft); border-radius: 6px; background: #fafbfd;
+  }
+  .loc-row textarea, .loc-row input { padding: 6px 8px; font-size: 12.5px; }
+  .loc-row textarea { min-height: 48px; }
+  .add-loc {
+    padding: 7px 12px; font-size: 12px; border: 1px dashed var(--border); border-radius: 6px;
+    background: #fff; cursor: pointer; color: var(--muted); width: 100%; transition: all .12s;
+  }
+  .add-loc:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+  /* === 토스트 === */
+  .toast-area {
+    position: fixed; right: 18px; bottom: 18px; z-index: 300;
+    display: flex; flex-direction: column-reverse; gap: 8px;
+    pointer-events: none;
+  }
+  .toast {
+    padding: 10px 14px; border-radius: 8px; background: #1f2328; color: #fff;
+    font-size: 12.5px; box-shadow: var(--shadow-md);
+    pointer-events: auto;
+    animation: toastIn .25s ease, toastOut .25s ease 3.5s forwards;
+    display: flex; gap: 8px; align-items: center; max-width: 380px;
+  }
+  .toast.success { background: var(--success); }
+  .toast.warn { background: var(--warn); color: #1f2328; }
+  .toast.error { background: var(--danger); }
+  .toast.info { background: var(--accent); }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(20px); } }
+  @keyframes toastOut { to { opacity: 0; transform: translateY(20px); } }
+
+  /* === 도움말 모달 === */
+  .help-fab {
+    position: fixed; right: 18px; bottom: 18px; z-index: 70;
+    width: 44px; height: 44px; border-radius: 50%;
+    background: var(--accent); color: #fff; border: 0; box-shadow: var(--shadow-md);
+    cursor: pointer; font-size: 20px; transition: all .15s;
+  }
+  .help-fab:hover { transform: scale(1.08); }
+  .help-modal-bg {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 250; display: none;
+    align-items: center; justify-content: center;
+  }
+  .help-modal-bg.open { display: flex; animation: fadein .2s ease; }
+  @keyframes fadein { from { opacity: 0; } }
+  .help-modal {
+    background: #fff; border-radius: 12px; padding: 24px 28px; max-width: 560px; width: 92%;
+    box-shadow: var(--shadow-lg);
+  }
+  .help-modal h3 { margin: 0 0 10px; font-size: 16px; }
+  .help-modal h4 { margin: 16px 0 6px; font-size: 13px; color: var(--accent); }
+  .help-modal ul { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.8; color: var(--fg); }
+  .help-modal kbd, kbd {
+    background: var(--bg); border: 1px solid var(--border); border-bottom-width: 2px;
+    padding: 1px 6px; border-radius: 4px; font-size: 10.5px;
+    font-family: ui-monospace, monospace; color: var(--muted);
+  }
+  .help-modal .modal-close {
+    float: right; background: transparent; border: 0; font-size: 18px; cursor: pointer; color: var(--muted);
+  }
+
+  /* === 첫 진입 가이드 === */
+  .welcome {
+    background: linear-gradient(135deg, var(--accent-soft), #f0f4ff);
+    border: 1px solid var(--accent); border-radius: 10px;
+    padding: 12px 16px; margin: 14px 18px 0;
+    display: flex; gap: 12px; align-items: center; font-size: 12.5px;
+    animation: slidein .3s ease;
+  }
+  @keyframes slidein { from { opacity: 0; transform: translateY(-10px); } }
+  .welcome.hidden { display: none; }
+  .welcome .icon { font-size: 22px; }
+  .welcome strong { color: var(--accent); }
+  .welcome .close { margin-left: auto; background: transparent; border: 0; cursor: pointer; color: var(--muted); font-size: 16px; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-row main">
+    <div class="title-block">
+      <h1>분류 검수</h1>
+      <span class="meta-info" id="meta-info">로드 중</span>
+    </div>
+    <div class="topbar-actions">
+      <a class="link" href="{{ url_for('process', job_id=job_id) }}">진행 화면</a>
+      <a class="link" href="{{ url_for('index') }}">새 업로드</a>
+      <button id="undo" class="btn ghost" title="마지막 변경 취소 (Ctrl+Z)" disabled>되돌리기</button>
+      <button id="pdf-fs" class="btn ghost" title="PDF 풀스크린 토글 (단축키 F)">PDF만 보기</button>
+      <button id="reset" class="btn secondary" type="button" title="모든 변경 취소">전체 취소</button>
+      <button id="save" class="btn primary">저장 후 PDF 재생성</button>
+    </div>
+  </div>
+  <div class="topbar-row sub">
+    <div class="progress-wrap" title="검수 진척률">
+      <div class="bar"><div class="bar-fill" id="progress-fill"></div></div>
+      <span id="progress-text">0%</span>
+    </div>
+    <span class="pill" id="pill-changed">그룹변경 0</span>
+    <span class="pill" id="pill-edited">필드편집 0</span>
+    <span class="pill" id="pill-deleted">삭제 0</span>
+    <span class="status" id="status"></span>
+  </div>
+</header>
+
+<div class="welcome" id="welcome">
+  <div>
+    <strong>안내</strong> · 카드를 다른 그룹으로 <strong>드래그</strong>하거나 우측 <strong>드롭다운</strong>으로 그룹을 바꿉니다.
+    카드를 <strong>클릭</strong>하면 그 자리에서 바로 펼쳐져 소재지·비고 등을 직접 편집할 수 있고, <strong>체크박스</strong>로 여러 카드를 한꺼번에 옮길 수 있습니다.
+    오른쪽 아래 도움말 버튼에 단축키가 있습니다.
+  </div>
+  <button class="close" id="welcome-close" aria-label="닫기">×</button>
+</div>
+
+<div class="toolbar">
+  <div class="tb-row">
+    <div class="search">
+      <input id="search" type="search" placeholder="사건번호 · 소재지 · 비고 검색  (단축키 /)" autocomplete="off">
+    </div>
+  </div>
+  <div class="tb-row filters" id="group-filter">
+    <button class="gf active" data-g="*"><span class="dot" style="background:#444"></span>전체</button>
+    {% for g in groups %}
+    <button class="gf" data-g="{{ g }}"><span class="dot"></span>{{ g }}</button>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="layout">
+  <div id="kanban">
+    {% for g in groups %}
+    {% set is_exclude = (g == '게재제외') %}
+    {% set color_var = ['--g-apt','--g-yulrip','--g-dandok','--g-sangga','--g-toji','--g-etc','--g-exclude'][loop.index0] %}
+    <section class="group-box" data-group="{{ g }}" data-gi="{{ loop.index0 }}" style="--g-color: var({{ color_var }});">
+      <header class="group-head">
+        <span class="gh-color"></span>
+        <span class="gh-title">{{ g }}</span>
+        {% if is_exclude %}<span class="gh-subtitle">(PDF에서 제외)</span>{% endif %}
+        <span class="gh-count" id="cnt-{{ loop.index0 }}">0건</span>
+        <span class="gh-toggle">▾</span>
+      </header>
+      <div class="cards" id="cards-{{ loop.index0 }}"></div>
+    </section>
+    {% endfor %}
+  </div>
+
+  <div class="pdf-pane">
+    <div class="ph">
+      <span>PDF 미리보기</span>
+      <span style="color:var(--muted);">· 저장 시 자동 갱신</span>
+      <span style="margin-left:auto; display:flex; gap:10px;">
+        <a href="/download/{{ job_id }}" target="_blank">PDF 다운로드</a>
+        <a href="/xlsx/{{ job_id }}" target="_blank">Excel 다운로드</a>
+      </span>
+    </div>
+    <iframe id="pdfFrame" src="/pdf/{{ job_id }}#t={{ range(1000000)|random }}"></iframe>
+  </div>
+</div>
+
+<!-- 일괄 작업 바 -->
+<div class="bulkbar" id="bulkbar">
+  <span id="bulk-count">0건 선택됨</span>
+  <select id="bulk-group">
+    <option value="">선택 그룹으로 이동…</option>
+    {% for g in groups %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+  </select>
+  <button id="bulk-delete" class="danger">선택 삭제</button>
+  <button id="bulk-clear" class="ghost">선택 해제</button>
+</div>
+
+<!-- 도움말 -->
+<button class="help-fab" id="help-btn" title="도움말 (단축키 ?)">?</button>
+<div class="help-modal-bg" id="help-bg">
+  <div class="help-modal" id="help-modal">
+    <button class="modal-close" id="help-close" aria-label="닫기">×</button>
+    <h3>검수 화면 도움말</h3>
+
+    <h4>그룹 분류 변경</h4>
+    <ul>
+      <li>카드를 다른 그룹 박스로 <strong>드래그앤드롭</strong></li>
+      <li>또는 카드 우측 <strong>드롭다운</strong>으로 선택</li>
+      <li><strong>체크박스</strong>로 여러 카드 선택 → 하단 바에서 일괄 이동</li>
+    </ul>
+
+    <h4>내용 편집</h4>
+    <ul>
+      <li>카드 클릭 또는 카드의 [편집] 버튼 → 같은 자리에서 인라인 편집기 펼침</li>
+      <li>사건번호·중복태그·물건번호·금액·소재지·비고를 화면 전환 없이 바로 수정</li>
+      <li>소재지는 [＋ 소재지 행 추가] 버튼으로 추가, 각 행 우측 [×]로 삭제</li>
+    </ul>
+
+    <h4>PDF 자동 반영</h4>
+    <ul>
+      <li>모든 변경은 상단 <strong>[저장 후 PDF 재생성]</strong>을 눌러야 PDF에 반영됩니다</li>
+      <li>저장 후 우측 PDF가 자동 갱신됩니다</li>
+    </ul>
+
+    <h4>키보드 단축키</h4>
+    <ul>
+      <li><kbd>/</kbd> — 검색창 포커스</li>
+      <li><kbd>?</kbd> — 도움말 열기</li>
+      <li><kbd>Esc</kbd> — 인라인 편집기/모달 닫기</li>
+      <li><kbd>Ctrl</kbd>+<kbd>S</kbd> — 전체 저장 후 PDF 재생성</li>
+      <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> — 마지막 변경 취소</li>
+      <li><kbd>Ctrl</kbd>+<kbd>A</kbd> (검색 결과 안에서) — 전체 선택</li>
+      <li><kbd>F</kbd> — PDF 풀스크린 모드 토글</li>
+      <li>카드 <strong>우클릭</strong> — 빠른 작업 메뉴 (그룹 이동·삭제·편집)</li>
+    </ul>
+
+    <h4>특별 표시</h4>
+    <ul>
+      <li>주황색 좌측 띠 — AI가 분류 어려움으로 표시한 사건 (지분매각·분묘소재·토지별도등기·제시외 등 키워드 포함). 우선 검수 권장.</li>
+      <li>노란 배경 — 그룹이 변경된 사건</li>
+      <li>파란 배경 — 필드(소재지·비고 등)가 편집된 사건</li>
+    </ul>
+  </div>
+</div>
+
+<!-- 우클릭 컨텍스트 메뉴 -->
+<div class="ctx-menu" id="ctx-menu">
+  <div class="ctx-sub-title">사건 작업</div>
+  <div class="ctx-item" data-act="edit">사건 편집</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-sub-title">그룹 이동</div>
+  {% for g in groups %}<div class="ctx-item" data-act="move" data-g="{{ g }}">{{ g }}로 이동</div>{% endfor %}
+  <div class="ctx-sep"></div>
+  <div class="ctx-item danger" data-act="delete">사건 삭제</div>
+</div>
+
+<!-- 토스트 영역 -->
+<div class="toast-area" id="toast-area"></div>
+
+<script>
+const JOB = {{ job_id|tojson }};
+const GROUPS = {{ groups|tojson }};
+const RECORDS = {{ records|tojson }};
+const HEADER = {{ header|tojson }};
+const GROUP_COLORS = ['--g-apt','--g-yulrip','--g-dandok','--g-sangga','--g-toji','--g-etc','--g-exclude'];
+
+document.getElementById('meta-info').textContent =
+  `${RECORDS.length}건 · ${HEADER.damdang || '-'} · ${HEADER.sale_date || '-'}`;
+
+// 그룹 필터 dot 색상
+document.querySelectorAll('.gf').forEach((b, i) => {
+  if (i === 0) return;
+  const dot = b.querySelector('.dot');
+  if (dot) dot.style.background = `var(${GROUP_COLORS[i-1]})`;
+});
+
+// === 상태 ===
+const ORIGINAL_GROUPS = RECORDS.map(r => r.group || '기타');
+const ORIGINAL_ORDER = RECORDS.map((_, i) => i);
+const STATE = RECORDS.map(r => ({
+  case_no: r.case_no || '', dup_tag: r.dup_tag || '', item_no: r.item_no || '',
+  group: r.group || '기타',
+  price: r.price || '', min_price: r.min_price || '',
+  note: r.note || '',
+  locations: (r.locations || []).map(l => ({ address: l.address || '', use: l.use || '' })),
+}));
+const ORIGINAL = JSON.parse(JSON.stringify(STATE));
+let ORDER = [...ORIGINAL_ORDER];
+const DELETED = new Set();
+const SELECTED = new Set();
+let activeIdx = -1;
+let dragOverCard = null;
+
+// Undo 스택
+const HISTORY = [];
+function snapshot(label) {
+  HISTORY.push({
+    label,
+    state: JSON.parse(JSON.stringify(STATE)),
+    order: [...ORDER],
+    deleted: new Set(DELETED),
+  });
+  if (HISTORY.length > 30) HISTORY.shift();
+  document.getElementById('undo').disabled = HISTORY.length === 0;
+}
+function undo() {
+  const h = HISTORY.pop();
+  if (!h) return;
+  for (let i=0;i<h.state.length;i++) STATE[i] = h.state[i];
+  ORDER = [...h.order];
+  DELETED.clear();
+  h.deleted.forEach(x => DELETED.add(x));
+  document.getElementById('undo').disabled = HISTORY.length === 0;
+  renderAll();
+  toast(`되돌림: ${h.label}`, 'info');
+}
+
+// === 토스트 ===
+function toast(msg, kind='info') {
+  const t = document.createElement('div');
+  t.className = 'toast ' + kind;
+  t.textContent = msg;
+  document.getElementById('toast-area').appendChild(t);
+  setTimeout(() => t.remove(), 4000);
+}
+
+// === 검사 함수 ===
+function shortText(s, n) {
+  if (!s) return ''; s = s.toString().replace(/\s+/g, ' ').trim();
+  return s.length > n ? s.slice(0, n) + '…' : s;
+}
+function recIsEdited(idx) {
+  const a = ORIGINAL[idx], b = STATE[idx];
+  if (!a) return false;
+  if (a.case_no !== b.case_no || a.dup_tag !== b.dup_tag || a.item_no !== b.item_no
+    || a.price !== b.price || a.min_price !== b.min_price || a.note !== b.note) return true;
+  if (a.locations.length !== b.locations.length) return true;
+  for (let i=0;i<a.locations.length;i++)
+    if (a.locations[i].address !== b.locations[i].address || a.locations[i].use !== b.locations[i].use) return true;
+  return false;
+}
+function highlight(text, q) {
+  if (!q || !text) return escapeHtml(text);
+  const re = new RegExp('(' + q.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + ')', 'gi');
+  return escapeHtml(text).replace(re, '<mark>$1</mark>');
+}
+function escapeHtml(s) {
+  return (s||'').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// AI 의심 사건 패턴 — 분류가 어려운 키워드 (검수 우선순위)
+const SUSPECT_KEYWORDS = [
+  '지분매각', '공유자우선', '토지별도등기', '지상수목', '분묘',
+  '제시외건물', '제시외수목', '혼합', '유치권', '맹지'
+];
+function isSuspect(r) {
+  const text = (r.note || '') + ' ' +
+    (r.locations || []).map(l => (l.address||'') + ' ' + (l.use||'')).join(' ');
+  return SUSPECT_KEYWORDS.some(k => text.includes(k));
+}
+
+function clearDropMarkers() {
+  document.querySelectorAll('.case-card.drop-before, .case-card.drop-after')
+    .forEach(el => el.classList.remove('drop-before', 'drop-after'));
+  dragOverCard = null;
+}
+
+function moveIndexToPosition(idx, targetIdx, place, newGroup) {
+  ORDER = ORDER.filter(x => x !== idx);
+  STATE[idx].group = newGroup;
+  const targetPos = ORDER.indexOf(targetIdx);
+  if (targetPos < 0) {
+    ORDER.push(idx);
+    return;
+  }
+  const insertAt = place === 'before' ? targetPos : targetPos + 1;
+  ORDER.splice(insertAt, 0, idx);
+}
+
+function moveIndexToGroupEnd(idx, newGroup) {
+  ORDER = ORDER.filter(x => x !== idx);
+  STATE[idx].group = newGroup;
+  let insertAt = ORDER.length;
+  for (let i = ORDER.length - 1; i >= 0; i--) {
+    const curIdx = ORDER[i];
+    if (STATE[curIdx].group === newGroup && !DELETED.has(curIdx)) {
+      insertAt = i + 1;
+      break;
+    }
+  }
+  ORDER.splice(insertAt, 0, idx);
+}
+
+function updatePricePair(idx, rawValue) {
+  const r = STATE[idx];
+  const rawPricePair = (rawValue || '').replace(/\r/g, '').trim();
+  const priceLines = rawPricePair
+    ? rawPricePair.split('\n').map(s => s.trim()).filter(Boolean)
+    : [];
+  if (priceLines.length === 0) {
+    r.price = '';
+    r.min_price = '';
+  } else if (priceLines.length === 1) {
+    const parts = priceLines[0].split(/\s*\/\s*|\s{2,}|\t+/).map(s => s.trim()).filter(Boolean);
+    r.price = parts[0] || '';
+    r.min_price = parts[1] || parts[0] || '';
+  } else {
+    r.price = priceLines[0] || '';
+    r.min_price = priceLines[1] || priceLines[0] || '';
+  }
+}
+
+function openEditor(idx) {
+  activeIdx = activeIdx === idx ? -1 : idx;
+  renderAll();
+  if (activeIdx === idx) {
+    requestAnimationFrame(() => {
+      const input = document.querySelector(`.case-card[data-idx="${idx}"] .inline-editor input[data-field="case_no"]`);
+      if (input) input.focus();
+    });
+  }
+}
+
+function closeEditor() {
+  if (activeIdx < 0) return;
+  activeIdx = -1;
+  renderAll();
+}
+
+function createInlineEditor(idx) {
+  const r = STATE[idx];
+  const wrap = document.createElement('div');
+  wrap.className = 'inline-editor';
+  let snapTaken = false;
+  const pricePair = [r.price || '', r.min_price || ''].filter(Boolean).join('\n');
+  wrap.innerHTML = `
+    <div class="inline-editor-head">
+      <div>
+        <strong>사건 직접 수정</strong>
+        <div class="hint">화면 전환 없이 여기서 바로 수정됩니다. PDF에는 상단 저장 버튼을 눌러 반영합니다.</div>
+      </div>
+      <button type="button" class="icon-btn" data-act="close-editor">닫기</button>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>사건번호</label><input data-field="case_no" class="field-mono" type="text" autocomplete="off" value="${escapeHtml(r.case_no)}"></div>
+      <div class="field"><label>물건번호</label><input data-field="item_no" class="field-mono" type="text" autocomplete="off" value="${escapeHtml(r.item_no)}"></div>
+    </div>
+    <div class="field"><label>중복/병합 태그</label><input data-field="dup_tag" class="field-mono" type="text" placeholder="예: 2024타경5097[중복]" value="${escapeHtml(r.dup_tag)}"></div>
+    <div class="field">
+      <label>감정평가액 / 최저매각가격</label>
+      <textarea data-field="price_pair" class="field-mono" rows="3" autocomplete="off" placeholder="첫 줄: 감정평가액&#10;둘째 줄: 최저매각가격">${escapeHtml(pricePair)}</textarea>
+    </div>
+    <div class="field"><label>그룹</label>
+      <select data-field="group">${GROUPS.map(g => `<option value="${escapeHtml(g)}"${g === r.group ? ' selected' : ''}>${escapeHtml(g)}</option>`).join('')}</select>
+    </div>
+    <div class="field">
+      <label>소재지·면적 / 용도</label>
+      <div class="locations" data-locations></div>
+      <button type="button" class="add-loc" data-act="add-loc">＋ 소재지 행 추가</button>
+    </div>
+    <div class="field"><label>비고</label><textarea data-field="note" rows="4" placeholder="편집 기준에 따라 작성된 비고">${escapeHtml(r.note)}</textarea></div>
+    <div style="display:flex; justify-content:flex-end; gap:8px;">
+      <button type="button" class="btn danger" data-act="delete-editor">사건 삭제</button>
+    </div>
+  `;
+
+  const locList = wrap.querySelector('[data-locations]');
+  const renderLocRows = () => {
+    locList.innerHTML = '';
+    r.locations.forEach((loc, li) => {
+      const row = document.createElement('div');
+      row.className = 'loc-row';
+      row.innerHTML = `
+        <textarea data-li="${li}" data-k="address" placeholder="소재지·면적">${escapeHtml(loc.address || '')}</textarea>
+        <input type="text" data-li="${li}" data-k="use" placeholder="용도" value="${escapeHtml(loc.use || '')}">
+        <button type="button" class="icon-btn danger" data-rm="${li}" title="이 소재지 행 삭제">행 삭제</button>
+      `;
+      locList.appendChild(row);
+    });
+  };
+  renderLocRows();
+
+  wrap.addEventListener('click', e => {
+    e.stopPropagation();
+    const action = e.target.dataset.act;
+    if (action === 'close-editor') {
+      closeEditor();
+      return;
+    }
+    if (action === 'add-loc') {
+      snapshot(`소재지 추가: ${r.case_no || '미상'}`);
+      r.locations.push({ address: '', use: '' });
+      renderAll();
+      return;
+    }
+    if (action === 'delete-editor') {
+      if (!confirm(`사건 ${r.case_no || '?'} (물건 ${r.item_no || '?'})을(를) 결과에서 삭제하시겠습니까?`)) return;
+      snapshot(`삭제: ${r.case_no || '미상'}`);
+      DELETED.add(idx);
+      activeIdx = -1;
+      renderAll();
+      toast(`${r.case_no || '사건'} 삭제됨`, 'warn');
+      return;
+    }
+    if (e.target.dataset.rm !== undefined) {
+      const li = parseInt(e.target.dataset.rm);
+      if (Number.isNaN(li)) return;
+      snapshot(`소재지 삭제: ${r.case_no || '미상'}`);
+      r.locations.splice(li, 1);
+      renderAll();
+    }
+  });
+
+  wrap.addEventListener('input', e => {
+    const field = e.target.dataset.field;
+    if (!field) return;
+    if (!snapTaken) {
+      snapshot(`편집: ${r.case_no || '미상'}`);
+      snapTaken = true;
+    }
+    if (field === 'price_pair') updatePricePair(idx, e.target.value);
+    else STATE[idx][field] = e.target.value;
+  });
+  wrap.addEventListener('change', e => {
+    const field = e.target.dataset.field;
+    if (field === 'group') {
+      if (!snapTaken) {
+        snapshot(`편집: ${r.case_no || '미상'}`);
+        snapTaken = true;
+      }
+      STATE[idx].group = e.target.value;
+      renderAll();
+    }
+    const li = parseInt(e.target.dataset.li);
+    const key = e.target.dataset.k;
+    if (!Number.isNaN(li) && key) {
+      if (!snapTaken) {
+        snapshot(`편집: ${r.case_no || '미상'}`);
+        snapTaken = true;
+      }
+      if (!STATE[idx].locations[li]) STATE[idx].locations[li] = { address: '', use: '' };
+      STATE[idx].locations[li][key] = e.target.value;
+      renderAll();
+    }
+  });
+  wrap.addEventListener('focusout', e => {
+    if (!wrap.contains(e.relatedTarget)) renderAll();
+  });
+
+  return wrap;
+}
+
+function makeCard(idx, animIdx) {
+  const r = STATE[idx];
+  const card = document.createElement('div');
+  card.className = 'case-card';
+  card.draggable = true;
+  card.dataset.idx = idx;
+  // 진입 애니메이션 (stagger)
+  if (typeof animIdx === 'number') {
+    card.classList.add('appear');
+    card.style.setProperty('--i', Math.min(animIdx * 25, 600) + 'ms');
+  }
+
+  const groupChanged = r.group !== ORIGINAL_GROUPS[idx];
+  const fieldEdited = recIsEdited(idx);
+  const suspect = isSuspect(r);
+  if (groupChanged) card.classList.add('changed');
+  if (fieldEdited) card.classList.add('edited');
+  if (suspect) card.classList.add('suspect');
+  if (SELECTED.has(idx)) card.classList.add('selected');
+  if (activeIdx === idx) card.classList.add('editing');
+
+  // 체크박스
+  const cb = document.createElement('div');
+  cb.className = 'cc-checkbox';
+  cb.innerHTML = '';
+  cb.addEventListener('click', e => {
+    e.stopPropagation();
+    if (SELECTED.has(idx)) SELECTED.delete(idx);
+    else SELECTED.add(idx);
+    renderAll();
+  });
+  card.appendChild(cb);
+
+  // 메타
+  const meta = document.createElement('div');
+  meta.className = 'cc-meta';
+  const q = document.getElementById('search').value.trim();
+
+  const line1 = document.createElement('div');
+  line1.className = 'cc-line1';
+  line1.innerHTML = `
+    <span class="case-no">${highlight(r.case_no || '미상', q)}</span>
+    ${r.dup_tag ? `<span class="dup">${highlight(r.dup_tag, q)}</span>` : ''}
+    <span class="item-no">물건 ${escapeHtml(r.item_no || '-')}</span>
+    ${suspect ? '<span class="suspect-marker" title="우선 검수 권장 — 지분매각·분묘·토지별도등기·혼합용도 등 분류 어려움 키워드 포함">우선 검수</span>' : ''}
+    ${groupChanged ? '<span class="badge changed">그룹변경</span>' : ''}
+    ${fieldEdited ? '<span class="badge edited">편집됨</span>' : ''}
+  `;
+  meta.appendChild(line1);
+
+  if (r.locations.length > 0) {
+    const firstLoc = r.locations[0];
+    const preview = document.createElement('div');
+    preview.className = 'cc-preview';
+    preview.innerHTML = highlight(shortText(firstLoc.address || '', 100), q)
+      + (r.locations.length > 1 ? ` <span style="color:var(--muted)">외 ${r.locations.length - 1}건</span>` : '');
+    meta.appendChild(preview);
+
+    const uses = Array.from(new Set(r.locations.map(l => l.use).filter(Boolean)));
+    if (uses.length) {
+      const useEl = document.createElement('div'); useEl.className = 'cc-uses';
+      useEl.innerHTML = uses.map(u => `<span>${escapeHtml(u)}</span>`).join('');
+      meta.appendChild(useEl);
+    }
+  }
+  if (r.note) {
+    const note = document.createElement('div'); note.className = 'cc-note';
+    note.innerHTML = highlight(shortText(r.note, 80), q);
+    meta.appendChild(note);
+  }
+  meta.addEventListener('click', () => openEditor(idx));
+  card.appendChild(meta);
+
+  const ctrl = document.createElement('div');
+  ctrl.className = 'cc-controls';
+  const sel = document.createElement('select');
+  GROUPS.forEach(g => {
+    const o = document.createElement('option'); o.value = g; o.textContent = g;
+    if (g === r.group) o.selected = true;
+    sel.appendChild(o);
+  });
+  sel.addEventListener('change', e => {
+    e.stopPropagation();
+    snapshot(`그룹 변경: ${r.case_no} → ${e.target.value}`);
+    STATE[idx].group = e.target.value;
+    renderAll();
+    toast(`${r.case_no} → [${e.target.value}]`, 'info');
+  });
+  sel.addEventListener('click', e => e.stopPropagation());
+  ctrl.appendChild(sel);
+
+  const row = document.createElement('div'); row.className = 'row-btns';
+  const editBtn = document.createElement('button');
+  editBtn.className = 'icon-btn'; editBtn.textContent = '편집'; editBtn.title = '사건 편집';
+  editBtn.addEventListener('click', e => { e.stopPropagation(); openEditor(idx); });
+  row.appendChild(editBtn);
+
+  const delBtn = document.createElement('button');
+  delBtn.className = 'icon-btn danger'; delBtn.textContent = '삭제';
+  delBtn.title = '결과에서 삭제';
+  delBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!confirm(`사건 ${r.case_no || '?'} (물건 ${r.item_no || '?'})을(를) 결과에서 삭제하시겠습니까?`)) return;
+    snapshot(`삭제: ${r.case_no}`);
+    DELETED.add(idx);
+    renderAll();
+    toast(`${r.case_no} 삭제됨`, 'warn');
+  });
+  row.appendChild(delBtn);
+  ctrl.appendChild(row);
+  card.appendChild(ctrl);
+
+  // 드래그
+  card.addEventListener('dragstart', e => {
+    e.dataTransfer.setData('text/plain', String(idx));
+    e.dataTransfer.effectAllowed = 'move';
+    card.classList.add('dragging');
+  });
+  card.addEventListener('dragend', () => {
+    card.classList.remove('dragging');
+    clearDropMarkers();
+  });
+  card.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const draggedIdx = parseInt(e.dataTransfer.getData('text/plain'));
+    if (Number.isNaN(draggedIdx) || draggedIdx === idx) return;
+    clearDropMarkers();
+    const rect = card.getBoundingClientRect();
+    const place = (e.clientY - rect.top) < (rect.height / 2) ? 'before' : 'after';
+    card.classList.add(place === 'before' ? 'drop-before' : 'drop-after');
+    dragOverCard = { idx, place };
+    e.dataTransfer.dropEffect = 'move';
+  });
+  card.addEventListener('dragleave', e => {
+    if (!card.contains(e.relatedTarget)) {
+      card.classList.remove('drop-before', 'drop-after');
+      if (dragOverCard && dragOverCard.idx === idx) dragOverCard = null;
+    }
+  });
+  card.addEventListener('drop', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const draggedIdx = parseInt(e.dataTransfer.getData('text/plain'));
+    if (Number.isNaN(draggedIdx) || draggedIdx === idx) return;
+    const rect = card.getBoundingClientRect();
+    const place = (e.clientY - rect.top) < (rect.height / 2) ? 'before' : 'after';
+    const newGroup = STATE[idx].group;
+    snapshot(`드래그 정렬: ${STATE[draggedIdx].case_no} → ${newGroup}`);
+    moveIndexToPosition(draggedIdx, idx, place, newGroup);
+    clearDropMarkers();
+    renderAll();
+    toast(`${STATE[draggedIdx].case_no} 순서 이동`, 'info');
+  });
+  // 우클릭 메뉴
+  card.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    openContextMenu(idx, e.clientX, e.clientY);
+  });
+  if (activeIdx === idx) card.appendChild(createInlineEditor(idx));
+  return card;
+}
+
+// === 컨텍스트 메뉴 ===
+let ctxIdx = -1;
+function openContextMenu(idx, x, y) {
+  ctxIdx = idx;
+  const menu = document.getElementById('ctx-menu');
+  menu.classList.add('open');
+  // 화면 밖으로 안 나가게
+  const r = menu.getBoundingClientRect();
+  const left = Math.min(x, window.innerWidth - r.width - 8);
+  const top = Math.min(y, window.innerHeight - r.height - 8);
+  menu.style.left = left + 'px';
+  menu.style.top = top + 'px';
+}
+function closeContextMenu() {
+  document.getElementById('ctx-menu').classList.remove('open');
+  ctxIdx = -1;
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('#ctx-menu')) closeContextMenu();
+});
+document.addEventListener('scroll', closeContextMenu, true);
+document.getElementById('ctx-menu').addEventListener('click', e => {
+  const item = e.target.closest('.ctx-item');
+  if (!item || ctxIdx < 0) return;
+  const act = item.dataset.act;
+  const r = STATE[ctxIdx];
+  if (act === 'edit') { openEditor(ctxIdx); }
+  else if (act === 'move') {
+    const g = item.dataset.g;
+    if (STATE[ctxIdx].group !== g) {
+      snapshot(`그룹 변경: ${r.case_no} → ${g}`);
+      STATE[ctxIdx].group = g;
+      renderAll();
+      toast(`${r.case_no} → [${g}]`, 'info');
+    }
+  } else if (act === 'delete') {
+    if (confirm(`사건 ${r.case_no} (물건 ${r.item_no})을(를) 삭제하시겠습니까?`)) {
+      snapshot(`삭제: ${r.case_no}`);
+      DELETED.add(ctxIdx);
+      renderAll();
+      toast(`${r.case_no} 삭제됨`, 'warn');
+    }
+  }
+  closeContextMenu();
+});
+
+function applyFilter(card) {
+  const idx = parseInt(card.dataset.idx);
+  const r = STATE[idx];
+  const gFilter = document.querySelector('.gf.active')?.dataset.g || '*';
+  const query = document.getElementById('search').value.trim().toLowerCase();
+  if (gFilter !== '*' && r.group !== gFilter) return false;
+  if (!query) return true;
+  const haystack = [r.case_no, r.dup_tag, r.item_no, r.note, r.price, r.min_price,
+    ...r.locations.map(l => (l.address||'') + ' ' + (l.use||''))].join(' ').toLowerCase();
+  return haystack.includes(query);
+}
+
+let firstRender = true;
+function renderAll() {
+  GROUPS.forEach((_, gi) => { document.getElementById('cards-' + gi).innerHTML = ''; });
+
+  let nGroupChanged = 0, nEdited = 0, nSuspect = 0;
+  let totalActive = 0;
+  let animIdx = 0;
+
+  ORDER.forEach(idx => {
+    const r = STATE[idx];
+    if (DELETED.has(idx)) return;
+    totalActive++;
+    const gi = GROUPS.indexOf(r.group);
+    if (gi < 0) return;
+    document.getElementById('cards-' + gi).appendChild(makeCard(idx, firstRender ? animIdx++ : undefined));
+    if (r.group !== ORIGINAL_GROUPS[idx]) nGroupChanged++;
+    if (recIsEdited(idx)) nEdited++;
+    if (isSuspect(r)) nSuspect++;
+  });
+  firstRender = false;
+
+  GROUPS.forEach((_, gi) => {
+    const cards = document.getElementById('cards-' + gi);
+    const cnt = cards.children.length;
+    document.getElementById('cnt-' + gi).textContent = cnt + '건';
+    if (cnt === 0) {
+      const empty = document.createElement('div'); empty.className = 'group-empty';
+      empty.innerHTML = (gi === GROUPS.length - 1)
+        ? '게재제외 사건 없음'
+        : '카드를 여기로 드래그해서 분류하세요';
+      cards.appendChild(empty);
+    }
+  });
+
+  // 검색 필터
+  document.querySelectorAll('.case-card').forEach(card => {
+    card.classList.toggle('hidden', !applyFilter(card));
+  });
+
+  // 카운터
+  setPill('pill-changed', '그룹변경 ' + nGroupChanged, nGroupChanged > 0 ? 'changed' : null);
+  setPill('pill-edited', '필드편집 ' + nEdited, nEdited > 0 ? 'edited' : null);
+  setPill('pill-deleted', '삭제 ' + DELETED.size, DELETED.size > 0 ? 'deleted' : null);
+
+  // 진척률 (변경/편집/삭제 중 최소 1건이라도 한 사건의 비율)
+  const touched = new Set();
+  STATE.forEach((r, i) => {
+    if (DELETED.has(i)) { touched.add(i); return; }
+    if (r.group !== ORIGINAL_GROUPS[i] || recIsEdited(i)) touched.add(i);
+  });
+  const total = STATE.length || 1;
+  const pct = Math.round(touched.size / total * 100);
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-text').textContent = `${touched.size}/${total} 검수 (${pct}%)`;
+
+  // 일괄 작업 바
+  updateBulkBar();
+}
+
+function setPill(id, text, kind) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.classList.remove('changed','edited','deleted','active');
+  if (kind) { el.classList.add('active'); el.classList.add(kind); }
+}
+
+function updateBulkBar() {
+  const bar = document.getElementById('bulkbar');
+  if (SELECTED.size === 0) { bar.classList.remove('open'); return; }
+  bar.classList.add('open');
+  document.getElementById('bulk-count').textContent = `${SELECTED.size}건 선택됨`;
+}
+
+// === 검색·필터 이벤트 ===
+document.getElementById('search').addEventListener('input', renderAll);
+document.querySelectorAll('.gf').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.gf').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    renderAll();
+  });
+});
+
+// 그룹 박스 토글
+document.querySelectorAll('.group-head').forEach(h => {
+  h.addEventListener('click', e => {
+    if (['SELECT','BUTTON'].includes(e.target.tagName)) return;
+    h.parentElement.classList.toggle('collapsed');
+  });
+});
+
+// 드래그 드롭
+document.querySelectorAll('.group-box').forEach(box => {
+  box.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; box.classList.add('drag-over'); });
+  box.addEventListener('dragleave', e => { if (e.target === box || !box.contains(e.relatedTarget)) box.classList.remove('drag-over'); });
+  box.addEventListener('drop', e => {
+    e.preventDefault();
+    box.classList.remove('drag-over');
+    clearDropMarkers();
+    const idx = parseInt(e.dataTransfer.getData('text/plain'));
+    if (Number.isNaN(idx)) return;
+    const newGroup = box.dataset.group;
+    snapshot(`드래그: ${STATE[idx].case_no} → ${newGroup}`);
+    moveIndexToGroupEnd(idx, newGroup);
+    renderAll();
+    toast(`${STATE[idx].case_no} → [${newGroup}]`, 'info');
+  });
+});
+
+// === 일괄 작업 ===
+document.getElementById('bulk-group').addEventListener('change', e => {
+  const newG = e.target.value;
+  if (!newG || SELECTED.size === 0) { e.target.value = ''; return; }
+  if (!confirm(`선택된 ${SELECTED.size}건을 [${newG}] 그룹으로 이동하시겠습니까?`)) { e.target.value = ''; return; }
+  snapshot(`일괄: ${SELECTED.size}건 → ${newG}`);
+  SELECTED.forEach(i => STATE[i].group = newG);
+  toast(`${SELECTED.size}건을 [${newG}]로 이동`, 'success');
+  SELECTED.clear();
+  e.target.value = '';
+  renderAll();
+});
+document.getElementById('bulk-delete').addEventListener('click', () => {
+  if (SELECTED.size === 0) return;
+  if (!confirm(`선택된 ${SELECTED.size}건을 삭제하시겠습니까?`)) return;
+  snapshot(`일괄 삭제: ${SELECTED.size}건`);
+  SELECTED.forEach(i => DELETED.add(i));
+  toast(`${SELECTED.size}건 삭제됨`, 'warn');
+  SELECTED.clear();
+  renderAll();
+});
+document.getElementById('bulk-clear').addEventListener('click', () => { SELECTED.clear(); renderAll(); });
+
+// === 변경 취소 / 저장 ===
+document.getElementById('reset').addEventListener('click', () => {
+  if (!confirm('모든 변경 사항(그룹·필드·삭제)을 되돌리시겠습니까?')) return;
+  for (let i = 0; i < ORIGINAL.length; i++) STATE[i] = JSON.parse(JSON.stringify(ORIGINAL[i]));
+  ORDER = [...ORIGINAL_ORDER];
+  DELETED.clear(); SELECTED.clear(); HISTORY.length = 0;
+  document.getElementById('undo').disabled = true;
+  renderAll();
+  toast('모든 변경 취소됨', 'info');
+});
+document.getElementById('undo').addEventListener('click', undo);
+
+document.getElementById('save').addEventListener('click', async () => {
+  const changes = {}, edits = {};
+  STATE.forEach((r, i) => {
+    if (DELETED.has(i)) return;
+    if (r.group !== ORIGINAL_GROUPS[i]) changes[i] = r.group;
+    if (recIsEdited(i)) {
+      edits[i] = {
+        case_no: r.case_no, dup_tag: r.dup_tag, item_no: r.item_no,
+        price: r.price, min_price: r.min_price, note: r.note,
+        locations: r.locations,
+      };
+    }
+  });
+  const deleted = Array.from(DELETED);
+  const order = ORDER.filter(i => !DELETED.has(i));
+  const originalLiveOrder = ORIGINAL_ORDER.filter(i => !DELETED.has(i));
+  const orderChanged = order.length !== originalLiveOrder.length
+    || order.some((idx, pos) => idx !== originalLiveOrder[pos]);
+  const total = Object.keys(changes).length + Object.keys(edits).length + deleted.length + (orderChanged ? 1 : 0);
+  if (total === 0) { toast('변경된 항목이 없습니다.', 'warn'); return; }
+  toast('저장 후 PDF 재생성 중…', 'info');
+  document.getElementById('save').disabled = true;
+  try {
+    const r = await fetch(`/review/${JOB}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ changes, edits, deleted, order }),
+    });
+    const data = await r.json();
+    if (!r.ok || !data.ok) throw new Error(data.error || ('HTTP ' + r.status));
+    toast(`저장 완료 — 그룹변경 ${Object.keys(changes).length} · 필드편집 ${Object.keys(edits).length} · 삭제 ${deleted.length}${orderChanged ? ' · 순서변경 1' : ''}`, 'success');
+    setTimeout(() => location.reload(), 700);
+  } catch (e) {
+    toast('실패: ' + e.message, 'error');
+    document.getElementById('save').disabled = false;
+  }
+});
+
+// === 도움말 ===
+const helpBg = document.getElementById('help-bg');
+document.getElementById('help-btn').addEventListener('click', () => helpBg.classList.add('open'));
+document.getElementById('help-close').addEventListener('click', () => helpBg.classList.remove('open'));
+helpBg.addEventListener('click', e => { if (e.target === helpBg) helpBg.classList.remove('open'); });
+
+// === 첫 진입 가이드 (1회) ===
+const welEl = document.getElementById('welcome');
+if (localStorage.getItem('court_review_welcome_seen')) welEl.classList.add('hidden');
+document.getElementById('welcome-close').addEventListener('click', () => {
+  welEl.classList.add('hidden');
+  localStorage.setItem('court_review_welcome_seen', '1');
+});
+
+// === PDF 풀스크린 토글 ===
+function togglePdfFs() {
+  document.body.classList.toggle('pdf-fs');
+  const on = document.body.classList.contains('pdf-fs');
+  document.getElementById('pdf-fs').textContent = on ? '분할 보기' : 'PDF만 보기';
+  localStorage.setItem('court_review_pdffs', on ? '1' : '');
+  toast(on ? 'PDF 풀스크린 (다시 F)' : '분할 뷰 복귀', 'info');
+}
+document.getElementById('pdf-fs').addEventListener('click', togglePdfFs);
+if (localStorage.getItem('court_review_pdffs')) {
+  document.body.classList.add('pdf-fs');
+  document.getElementById('pdf-fs').textContent = '분할 보기';
+}
+
+// === 그룹 접힘 상태 저장 (localStorage) ===
+const COLLAPSED_KEY = 'court_review_collapsed_' + JOB;
+const collapsed = JSON.parse(localStorage.getItem(COLLAPSED_KEY) || '[]');
+collapsed.forEach(g => {
+  const box = document.querySelector(`.group-box[data-group="${g}"]`);
+  if (box) box.classList.add('collapsed');
+});
+function saveCollapsedState() {
+  const list = Array.from(document.querySelectorAll('.group-box.collapsed')).map(b => b.dataset.group);
+  localStorage.setItem(COLLAPSED_KEY, JSON.stringify(list));
+}
+document.querySelectorAll('.group-head').forEach(h => {
+  h.addEventListener('click', e => { setTimeout(saveCollapsedState, 50); });
+});
+
+// === 키보드 ===
+document.addEventListener('keydown', e => {
+  const isInput = ['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName);
+  if (e.key === 'Escape') {
+    if (activeIdx >= 0) { closeEditor(); e.preventDefault(); }
+    else if (helpBg.classList.contains('open')) { helpBg.classList.remove('open'); e.preventDefault(); }
+  } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    e.preventDefault(); document.getElementById('save').click();
+  } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+    if (!isInput) { e.preventDefault(); undo(); }
+  } else if (!isInput && e.key === '/') {
+    e.preventDefault(); document.getElementById('search').focus();
+  } else if (!isInput && e.key === '?') {
+    e.preventDefault(); helpBg.classList.add('open');
+  } else if (!isInput && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+    e.preventDefault();
+    document.querySelectorAll('.case-card:not(.hidden)').forEach(c => SELECTED.add(parseInt(c.dataset.idx)));
+    renderAll();
+    toast(`${SELECTED.size}건 선택됨`, 'info');
+  } else if (!isInput && e.key.toLowerCase() === 'f') {
+    e.preventDefault(); togglePdfFs();
+  }
+});
+
+renderAll();
+</script>
+</body>
+</html>

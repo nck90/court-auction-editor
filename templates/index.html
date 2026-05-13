@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>법원 경매공고 편집기</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<style>
+  .upload { margin: 16px 0 24px; }
+  .drop {
+    display: block; cursor: pointer; position: relative;
+    border: 1.5px dashed #c4cdd9; border-radius: 10px;
+    padding: 32px 24px; text-align: center;
+    background: #fafcff;
+    transition: all .15s;
+  }
+  .drop:hover, .drop.dragover {
+    border-color: #2563eb; background: #eaf1ff;
+  }
+  .drop input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .drop-icon {
+    width: 32px; height: 32px; margin: 0 auto 10px; border-radius: 6px;
+    border: 1.5px solid #c4cdd9; background: #fff;
+    position: relative;
+  }
+  .drop-icon::before {
+    content: ''; position: absolute; inset: 6px;
+    border: 1.5px solid #6b7382; border-radius: 3px;
+  }
+  .drop-icon.ok {
+    background: #15803d; border-color: #15803d;
+  }
+  .drop-icon.ok::before {
+    border: 0; background: transparent;
+    border-bottom: 2.5px solid #fff; border-left: 2.5px solid #fff;
+    width: 14px; height: 7px; top: 9px; left: 7px; right: auto; bottom: auto;
+    border-radius: 0; transform: rotate(-45deg);
+  }
+  .drop:hover .drop-icon { border-color: #2563eb; }
+  .drop:hover .drop-icon::before { border-color: #2563eb; }
+
+  .drop-text { font-size: 14.5px; color: #1f2328; margin-bottom: 4px; font-weight: 500; }
+  .drop-text strong { color: #2563eb; font-family: ui-monospace, monospace; font-weight: 600; }
+  .drop-hint { font-size: 12.5px; color: #6b7382; }
+
+  .drop.has-file {
+    border-style: solid; border-color: #c4cdd9;
+    background: #fff;
+  }
+  .file-info {
+    display: none; flex-direction: column; gap: 6px; align-items: center;
+  }
+  .drop.has-file .drop-info { display: none; }
+  .drop.has-file .file-info { display: flex; }
+  .file-info .filename {
+    font-size: 14.5px; font-weight: 600; color: #1f2328;
+    word-break: break-all; max-width: 90%; text-align: center;
+  }
+  .file-info .filemeta { font-size: 12.5px; color: #6b7382; }
+  .file-info .file-actions { margin-top: 6px; display: flex; gap: 8px; }
+  .file-info .file-actions button {
+    background: #fff; border: 1px solid #c4cdd9; padding: 4px 12px;
+    border-radius: 6px; font-size: 12px; cursor: pointer; color: #1f2328;
+    transition: all .12s;
+  }
+  .file-info .file-actions button:hover { background: #f5f7fb; border-color: #2563eb; color: #2563eb; }
+  .file-info .file-actions button.remove:hover { background: #ffebeb; border-color: #dc2626; color: #dc2626; }
+
+  .btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+  .btn { transition: all .15s; }
+  .btn:hover:not([disabled]) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37,99,235,0.2); }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="hero">
+    <h1>법원 경매공고 편집기</h1>
+    <p class="subtitle">법원원고(한글/PDF)를 <strong>2023.12.04 편집 기준</strong>에 맞춰 자동 편집하고 PDF로 변환합니다.</p>
+    <p style="margin-top:8px;font-size:13px;">
+      또는 <a href="{{ url_for('edit_text_page') }}"><strong>원고 텍스트 붙여넣기 모드</strong></a> (단발 편집, 루프 없음)
+    </p>
+  </header>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <div class="flash">
+      {% for msg in messages %}<div class="flash-item"><strong>주의:</strong> {{ msg }}</div>{% endfor %}
+    </div>
+    {% endif %}
+  {% endwith %}
+
+  <form id="uploadForm" class="upload" method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data">
+    <label class="drop" id="drop">
+      <input type="file" id="fileInput" name="file" accept=".pdf,.hwp,.hwpx" required>
+      <div class="drop-info">
+        <div class="drop-icon" aria-hidden="true"></div>
+        <div class="drop-text">여기에 <strong>.hwp · .hwpx · .pdf</strong> 파일을 드롭하거나 클릭</div>
+        <div class="drop-hint">법원원고 원본 파일을 그대로 올려 주세요 (최대 32MB)</div>
+      </div>
+      <div class="file-info">
+        <div class="drop-icon ok" aria-hidden="true"></div>
+        <div class="filename" id="fileName">파일명</div>
+        <div class="filemeta" id="fileMeta">크기 · 형식</div>
+        <div class="file-actions">
+          <button type="button" id="changeBtn">파일 변경</button>
+          <button type="button" class="remove" id="removeBtn">선택 취소</button>
+        </div>
+      </div>
+    </label>
+
+    <button type="submit" class="btn" id="submitBtn" disabled>편집 기준 적용 후 PDF 생성</button>
+  </form>
+
+  <section class="rules">
+    <h2>적용 규칙 (2023.12.04 편집 기준)</h2>
+    <ul>
+      <li>표 구조: 소재지 + 상세내역 → <code>소재지 및 면적[㎡]</code>, 용도 컬럼 신설</li>
+      <li>광역시·도 접두어 삭제 (단, <strong>세종특별자치시</strong>는 유지)</li>
+      <li>건축자재 (철근콘크리트구조, 일반철골구조, 판넬지붕 등) 삭제</li>
+      <li>같은 리/면 연속 주소 → <code>동소</code>로 치환</li>
+      <li>제시외 면적 합산, 대표 건물명은 최단 명칭</li>
+      <li>지분 표기: <code>이름+숫자/숫자+지분전부·일부</code> 형식</li>
+      <li>비고 공백 제거 · 붙여쓰기 · 마지막 마침표 삭제</li>
+      <li><code>일괄매각</code>·<code>지분매각</code>은 비고 맨 앞. <code>(중복)</code>·<code>(병합)</code> 사건번호는 비고 맨 앞</li>
+    </ul>
+  </section>
+
+  <footer class="foot">
+    <small>로컬 실행 전용 · Flask + Qwen 4단계 파이프라인 + 검수 UI + 학습형 RAG</small>
+  </footer>
+</main>
+
+<script>
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('fileInput');
+const submitBtn = document.getElementById('submitBtn');
+const fileName = document.getElementById('fileName');
+const fileMeta = document.getElementById('fileMeta');
+const changeBtn = document.getElementById('changeBtn');
+const removeBtn = document.getElementById('removeBtn');
+const form = document.getElementById('uploadForm');
+
+function fmtSize(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1024*1024) return (b/1024).toFixed(1) + ' KB';
+  return (b/(1024*1024)).toFixed(2) + ' MB';
+}
+
+function showFile(f) {
+  drop.classList.add('has-file');
+  fileName.textContent = f.name;
+  const ext = f.name.split('.').pop().toUpperCase();
+  fileMeta.textContent = `${ext} · ${fmtSize(f.size)}`;
+  submitBtn.disabled = false;
+  submitBtn.textContent = '편집 시작';
+}
+
+function clearFile() {
+  fileInput.value = '';
+  drop.classList.remove('has-file');
+  submitBtn.disabled = true;
+  submitBtn.textContent = '편집 기준 적용 후 PDF 생성';
+}
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files && fileInput.files[0]) showFile(fileInput.files[0]);
+  else clearFile();
+});
+
+changeBtn.addEventListener('click', e => { e.preventDefault(); fileInput.click(); });
+removeBtn.addEventListener('click', e => { e.preventDefault(); clearFile(); });
+
+// 드래그앤드롭
+['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); e.stopPropagation();
+  drop.classList.add('dragover');
+}));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); e.stopPropagation();
+  if (ev === 'dragleave' && drop.contains(e.relatedTarget)) return;
+  drop.classList.remove('dragover');
+}));
+drop.addEventListener('drop', e => {
+  const files = e.dataTransfer.files;
+  if (!files || !files[0]) return;
+  // 확장자 검사
+  const name = files[0].name.toLowerCase();
+  if (!/\.(pdf|hwp|hwpx)$/.test(name)) {
+    alert('지원 형식: .pdf, .hwp, .hwpx');
+    return;
+  }
+  // input에 파일 설정
+  const dt = new DataTransfer();
+  dt.items.add(files[0]);
+  fileInput.files = dt.files;
+  showFile(files[0]);
+});
+
+// 제출 시 로딩 인디케이터
+form.addEventListener('submit', () => {
+  submitBtn.disabled = true;
+  submitBtn.textContent = '업로드 중…';
+});
+</script>
+</body>
+</html>

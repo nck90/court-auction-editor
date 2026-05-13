@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>편집 중 — 법원 경매공고 편집기</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<style>
+  body { background: #f5f7fb; font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+  .processing-card {
+    max-width: 720px; margin: 40px auto; background: #fff;
+    border: 1px solid #d6dde6; border-radius: 14px;
+    padding: 32px 36px; box-shadow: 0 4px 18px rgba(0,0,0,.06);
+  }
+  .pc-header { text-align: center; margin-bottom: 24px; }
+  .pc-title {
+    font-size: 22px; font-weight: 700; margin: 0 0 6px; color: #1f2328;
+  }
+  .pc-subtitle { font-size: 13.5px; color: #6b7382; margin: 0; }
+
+  .progress-section { margin: 28px 0; }
+  .progress-label {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 8px;
+  }
+  .progress-percent {
+    font-size: 28px; font-weight: 700; color: #2563eb;
+    font-variant-numeric: tabular-nums;
+  }
+  .progress-stage { font-size: 13px; color: #6b7382; }
+  .progress-bar {
+    width: 100%; height: 10px; background: #e9eef3;
+    border-radius: 5px; overflow: hidden; position: relative;
+  }
+  .progress-fill {
+    height: 100%; background: linear-gradient(90deg, #2563eb, #14b8a6);
+    border-radius: 5px; transition: width .4s ease; width: 0%;
+    position: relative;
+  }
+  .progress-fill.indeterminate {
+    background: linear-gradient(90deg, #2563eb 0%, #14b8a6 50%, #2563eb 100%);
+    background-size: 200% 100%; animation: shimmer 1.5s infinite linear;
+  }
+  @keyframes shimmer { from { background-position: 0% 0; } to { background-position: -200% 0; } }
+
+  .info-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0;
+  }
+  .info-cell {
+    background: #f5f7fb; border: 1px solid #e9eef3; border-radius: 8px;
+    padding: 10px 14px;
+  }
+  .info-label {
+    font-size: 11px; color: #6b7382; text-transform: uppercase; letter-spacing: 0.5px;
+    font-weight: 600; margin-bottom: 4px;
+  }
+  .info-value {
+    font-size: 14px; color: #1f2328; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .phase-text {
+    background: #f5f7fb; border-radius: 8px; padding: 12px 14px;
+    font-size: 13px; color: #1f2328; min-height: 42px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .phase-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: #2563eb;
+    animation: pulse 1.2s infinite ease-in-out; flex-shrink: 0;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.85); }
+  }
+  .phase-dot.done { background: #15803d; animation: none; }
+  .phase-dot.err { background: #dc2626; animation: none; }
+
+  .step-list {
+    margin: 20px 0; padding: 0; list-style: none;
+    display: flex; gap: 6px;
+  }
+  .step-list li {
+    flex: 1; padding: 12px 10px; border-radius: 6px; font-size: 12.5px;
+    background: #f5f7fb; color: #6b7382; text-align: center;
+    border: 1px solid #e9eef3; transition: all .2s;
+    display: flex; gap: 8px; align-items: center; justify-content: center;
+  }
+  .step-list li.active {
+    background: #eaf1ff; color: #2563eb; border-color: #2563eb; font-weight: 600;
+  }
+  .step-list li.done {
+    background: #e6f6ec; color: #15803d; border-color: #15803d;
+  }
+  .step-num {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: #fff; border: 1.5px solid currentColor;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11.5px; font-weight: 700; flex-shrink: 0;
+  }
+  .step-list li.done .step-num { background: #15803d; color: #fff; border-color: #15803d; }
+  .step-list li.active .step-num { background: #2563eb; color: #fff; border-color: #2563eb; }
+
+  .result-section { display: none; margin-top: 24px; }
+  .result-section.show { display: block; }
+  .result-actions { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .btn { padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; transition: all .15s; }
+  .btn.primary { background: #2563eb; color: #fff; border: 1px solid #2563eb; }
+  .btn.primary:hover { background: #1d4ed8; transform: translateY(-1px); }
+  .btn.secondary { background: #fff; color: #1f2328; border: 1px solid #d6dde6; }
+  .btn.secondary:hover { background: #f5f7fb; border-color: #2563eb; color: #2563eb; }
+  .btn.review { background: #14b8a6; color: #fff; border: 1px solid #14b8a6; }
+  .btn.review:hover { background: #0d9488; transform: translateY(-1px); }
+
+  .pdf-preview { border: 1px solid #d6dde6; border-radius: 8px; overflow: hidden; background: #fff; }
+  .pdf-preview iframe { width: 100%; height: 70vh; border: 0; display: block; }
+
+  .err-section { display: none; }
+  .err-section.show { display: block; }
+  .err-box { background: #ffebeb; border: 1px solid #dc2626; color: #991b1b; padding: 14px 16px; border-radius: 8px; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="processing-card" id="processing-card">
+  <div class="pc-header">
+    <h1 class="pc-title" id="title">원고 편집 중</h1>
+    <p class="pc-subtitle" id="subtitle">법원경매공고 원고를 편집 기준에 맞춰 자동 변환하고 있습니다.</p>
+  </div>
+
+  <div class="progress-section">
+    <div class="progress-label">
+      <span class="progress-percent" id="percent">0%</span>
+      <span class="progress-stage" id="stage">시작 중…</span>
+    </div>
+    <div class="progress-bar">
+      <div class="progress-fill indeterminate" id="progress-fill"></div>
+    </div>
+  </div>
+
+  <ol class="step-list" id="step-list">
+    <li data-stage="extract_text"><span class="step-num">1</span><span>텍스트 추출</span></li>
+    <li data-stage="extract"><span class="step-num">2</span><span>구조 분리</span></li>
+    <li data-stage="edit"><span class="step-num">3</span><span>사건 편집</span></li>
+    <li data-stage="finalize render"><span class="step-num">4</span><span>PDF 생성</span></li>
+  </ol>
+
+  <div class="info-grid">
+    <div class="info-cell">
+      <div class="info-label">경과 시간</div>
+      <div class="info-value" id="elapsed">0초</div>
+    </div>
+    <div class="info-cell">
+      <div class="info-label">예상 남은 시간</div>
+      <div class="info-value" id="eta">—</div>
+    </div>
+    <div class="info-cell">
+      <div class="info-label">처리 사건</div>
+      <div class="info-value" id="records-progress">대기 중</div>
+    </div>
+    <div class="info-cell">
+      <div class="info-label">현재 단계</div>
+      <div class="info-value" id="stage-name">시작</div>
+    </div>
+  </div>
+
+  <div class="phase-text">
+    <span class="phase-dot" id="phase-dot"></span>
+    <span id="phase-msg">파이프라인 시작 중…</span>
+  </div>
+</div>
+
+<div class="processing-card result-section" id="result">
+  <div class="pc-header">
+    <h1 class="pc-title" id="result-title">편집 완료</h1>
+    <p class="pc-subtitle" id="result-subtitle">PDF가 생성되었습니다. 검수 UI에서 분류·내용을 확인하실 수 있습니다.</p>
+  </div>
+  <div class="result-actions">
+    <a id="review-link" class="btn review" href="#">검수 UI 열기</a>
+    <a id="dl" class="btn primary" href="#">PDF 다운로드</a>
+    <a id="xl" class="btn secondary" href="#">Excel 다운로드</a>
+    <a href="{{ url_for('index') }}" class="btn secondary">새 파일 업로드</a>
+  </div>
+  <div class="pdf-preview"><iframe id="pdfFrame" src="about:blank"></iframe></div>
+</div>
+
+<div class="processing-card err-section" id="err">
+  <div class="pc-header">
+    <h1 class="pc-title" style="color:#dc2626;">편집 실패</h1>
+  </div>
+  <div class="err-box" id="err-msg"></div>
+  <div style="margin-top:14px;">
+    <a href="{{ url_for('index') }}" class="btn secondary">새 파일 업로드</a>
+  </div>
+</div>
+
+<script>
+const JOB = {{ job_id|tojson }};
+const $ = id => document.getElementById(id);
+
+const t0 = performance.now();
+let etaSec = null;
+let lastDoneRecords = 0;
+let lastTimePerRecord = 0;
+
+function fmtSec(s) {
+  s = Math.max(0, Math.round(s));
+  if (s < 60) return s + '초';
+  const m = Math.floor(s/60), r = s%60;
+  return m + '분' + (r ? ' ' + r + '초' : '');
+}
+
+const STAGE_NAMES = {
+  'extract_text': '텍스트 추출',
+  'extract': '구조 분리 (LLM 1회)',
+  'edit': '사건 편집 (LLM 다수)',
+  'finalize': '정렬·마무리',
+  'render': 'PDF 생성',
+  'done': '완료',
+};
+
+function updateSteps(stage) {
+  document.querySelectorAll('.step-list li').forEach(li => {
+    const stages = (li.dataset.stage || '').split(' ');
+    li.classList.remove('active', 'done');
+    if (stages.includes(stage)) li.classList.add('active');
+  });
+  // 이전 단계는 done
+  const order = ['extract_text', 'extract', 'edit', 'finalize', 'render', 'done'];
+  const cur = order.indexOf(stage);
+  document.querySelectorAll('.step-list li').forEach(li => {
+    const stages = (li.dataset.stage || '').split(' ');
+    const liIdx = Math.min(...stages.map(s => order.indexOf(s)).filter(x => x >= 0));
+    if (liIdx < cur) li.classList.add('done');
+  });
+}
+
+function tick() {
+  const sec = (performance.now() - t0) / 1000;
+  $('elapsed').textContent = fmtSec(sec);
+}
+const elapsedTimer = setInterval(tick, 250); tick();
+
+function showError(msg) {
+  clearInterval(elapsedTimer);
+  $('processing-card').style.display = 'none';
+  $('err').classList.add('show');
+  $('err-msg').textContent = msg;
+}
+
+function showResult(data) {
+  clearInterval(elapsedTimer);
+  $('processing-card').style.display = 'none';
+  $('result').classList.add('show');
+  $('dl').href = data.download;
+  $('xl').href = data.excel;
+  $('review-link').href = `/review/${JOB}`;
+  $('pdfFrame').src = data.pdf + '#t=' + Date.now();
+}
+
+let polling = false;
+async function poll() {
+  if (polling) return;
+  polling = true;
+  try {
+    const r = await fetch(`/run-status/${JOB}`);
+    if (!r.ok) throw new Error('상태 확인 실패: HTTP ' + r.status);
+    const data = await r.json();
+
+    if (data.phase) $('phase-msg').textContent = data.phase;
+
+    // 진행률
+    if (typeof data.percent === 'number') {
+      const pct = Math.max(0, Math.min(100, data.percent));
+      $('percent').textContent = pct + '%';
+      $('progress-fill').style.width = pct + '%';
+      $('progress-fill').classList.remove('indeterminate');
+    }
+
+    // 단계
+    if (data.stage) {
+      updateSteps(data.stage);
+      $('stage-name').textContent = STAGE_NAMES[data.stage] || data.stage;
+    }
+
+    // 사건 진척
+    if (data.total_records && typeof data.done_records === 'number') {
+      $('records-progress').textContent = `${data.done_records}/${data.total_records}건`;
+      // ETA: 단계별 시간을 추적
+      const elapsed = (performance.now() - t0) / 1000;
+      if (data.done_records > 0) {
+        // 편집 단계 기준 (10~90% 사이 80%가 사건 편집)
+        const editedFraction = data.done_records / data.total_records;
+        if (editedFraction > 0.05) {
+          // 편집 단계 시작 후 ~10초 정도 지났다고 가정
+          const editStartGuess = elapsed * 0.1;
+          const editElapsed = elapsed - editStartGuess;
+          const editTotalEst = editElapsed / editedFraction;
+          const remaining = editTotalEst - editElapsed + 5; // PDF 생성 5초
+          if (remaining > 0 && remaining < 600) {
+            etaSec = remaining;
+            $('eta').textContent = '약 ' + fmtSec(remaining);
+          }
+        }
+      }
+    } else if (data.percent && data.percent > 5 && data.percent < 95) {
+      // 사건 정보 없으면 percent 기반 ETA
+      const elapsed = (performance.now() - t0) / 1000;
+      const totalEst = elapsed / (data.percent / 100);
+      const remaining = totalEst - elapsed;
+      if (remaining > 0 && remaining < 600) {
+        $('eta').textContent = '약 ' + fmtSec(remaining);
+      }
+    }
+
+    if (data.status === 'done') {
+      $('percent').textContent = '100%';
+      $('progress-fill').style.width = '100%';
+      updateSteps('done');
+      $('phase-dot').classList.add('done');
+      $('eta').textContent = '완료';
+      setTimeout(() => showResult(data), 400);
+      return;
+    }
+    if (data.status === 'error') {
+      $('phase-dot').classList.add('err');
+      showError(data.error || '알 수 없는 오류');
+      return;
+    }
+  } catch (e) {
+    showError(e.message);
+    return;
+  } finally { polling = false; }
+  setTimeout(poll, 800);
+}
+
+fetch(`/run/${JOB}`, { method: 'POST' })
+  .then(async r => {
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+    poll();
+  })
+  .catch(e => showError(e.message));
+</script>
+</body>
+</html>

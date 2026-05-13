@@ -1,0 +1,17 @@
+.git
+.DS_Store
+.claude
+.omc
+.omx
+__pycache__
+*.pyc
+outputs
+uploads
+states
+learned
+measurement_all
+measurement_all2
+measurement_all3
+measurement_results
+0320*
+*.pdf

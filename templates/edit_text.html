@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>원고 텍스트 편집 — 법원 경매공고 편집기</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<style>
+  .text-edit { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .text-edit textarea { width: 100%; min-height: 480px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; padding: 12px; border: 1px solid #d0d7de; border-radius: 8px; resize: vertical; box-sizing: border-box; }
+  .text-edit .col h3 { margin: 0 0 8px; font-size: 14px; color: #57606a; }
+  .actions { display: flex; gap: 12px; align-items: center; margin: 12px 0; flex-wrap: wrap; }
+  .actions .btn { padding: 10px 20px; }
+  .actions .secondary { background: #f6f8fa; color: #24292f; border: 1px solid #d0d7de; }
+  .status { font-size: 13px; color: #57606a; }
+  .status.err { color: #cf222e; }
+  .status.ok { color: #1a7f37; }
+  .nav-back { font-size: 13px; }
+  @media (max-width: 900px) { .text-edit { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="hero">
+    <h1>원고 텍스트 편집</h1>
+    <p class="subtitle">법원 원고 텍스트를 붙여넣으면 <strong>2023.12.04 편집 기준</strong>에 맞춰 한 번에 편집합니다 (Qwen API 1회 호출).</p>
+    <p class="nav-back"><a href="{{ url_for('index') }}">← 파일 업로드 모드로</a></p>
+  </header>
+
+  <div class="text-edit">
+    <div class="col">
+      <h3>입력: 법원 원고</h3>
+      <textarea id="raw" placeholder="여기에 법원 원고를 붙여넣으세요..."></textarea>
+    </div>
+    <div class="col">
+      <h3>출력: 편집본</h3>
+      <textarea id="out" placeholder="편집 결과가 여기에 표시됩니다." readonly></textarea>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button id="run" class="btn">편집 실행</button>
+    <button id="copy" class="btn secondary" type="button">결과 복사</button>
+    <button id="clear" class="btn secondary" type="button">초기화</button>
+    <span id="status" class="status"></span>
+  </div>
+</main>
+
+<script>
+  const $raw = document.getElementById('raw');
+  const $out = document.getElementById('out');
+  const $run = document.getElementById('run');
+  const $copy = document.getElementById('copy');
+  const $clear = document.getElementById('clear');
+  const $status = document.getElementById('status');
+
+  function setStatus(msg, kind = '') {
+    $status.textContent = msg;
+    $status.className = 'status' + (kind ? ' ' + kind : '');
+  }
+
+  $run.addEventListener('click', async () => {
+    const text = $raw.value.trim();
+    if (!text) { setStatus('원고를 입력하세요.', 'err'); return; }
+    $run.disabled = true;
+    $out.value = '';
+    setStatus('편집 중… (Qwen API 호출)');
+    const t0 = performance.now();
+    try {
+      const r = await fetch('/api/edit-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+      $out.value = data.edited || '';
+      const sec = ((performance.now() - t0) / 1000).toFixed(1);
+      setStatus(`완료 (${sec}s)`, 'ok');
+    } catch (e) {
+      setStatus('실패: ' + e.message, 'err');
+    } finally {
+      $run.disabled = false;
+    }
+  });
+
+  $copy.addEventListener('click', async () => {
+    if (!$out.value) { setStatus('복사할 내용이 없습니다.', 'err'); return; }
+    try {
+      await navigator.clipboard.writeText($out.value);
+      setStatus('클립보드에 복사됨', 'ok');
+    } catch {
+      $out.select();
+      document.execCommand('copy');
+      setStatus('클립보드에 복사됨', 'ok');
+    }
+  });
+
+  $clear.addEventListener('click', () => {
+    $raw.value = '';
+    $out.value = '';
+    setStatus('');
+    $raw.focus();
+  });
+</script>
+</body>
+</html>

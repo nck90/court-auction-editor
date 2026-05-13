@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>편집 결과 — 법원 경매공고 편집기</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<style>
+  .preview { margin: 20px 0; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; background: #fff; }
+  .preview iframe { width: 100%; height: 80vh; border: 0; display: block; }
+  .actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  .actions .btn { flex: 0 1 auto; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="hero">
+    <h1>편집 완료</h1>
+    <p class="subtitle">편집 기준에 맞춰 정리된 공고 PDF입니다.</p>
+  </header>
+
+  <div class="actions">
+    <a href="{{ download_url }}" class="btn">📥 PDF 다운로드</a>
+    <a href="/xlsx/{{ job_id }}" class="btn">📊 Excel 다운로드</a>
+    <a href="{{ url_for('index') }}" class="btn btn-ghost">↩ 새 파일 업로드</a>
+  </div>
+
+  <div class="preview">
+    <iframe src="{{ pdf_url }}" title="편집본 PDF"></iframe>
+  </div>
+
+  <footer class="foot">
+    <small>작업 ID: {{ job_id }}</small>
+  </footer>
+</main>
+</body>
+</html>
